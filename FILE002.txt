@@ -1,0 +1,22 @@
+| pg_get_viewdef                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|  SELECT fiscal_year_id,
+    rak_version_id,
+    rak_code,
+    sub_activity_id,
+    sub_activity_code,
+    sub_activity_name,
+    budget_account_id,
+    budget_account_code,
+    budget_account_name,
+    annual_plan,
+    annual_realization,
+    absorption_percent AS progress_percent,
+        CASE
+            WHEN annual_plan = 0::numeric AND annual_realization = 0::numeric THEN 'NO_ACTIVITY'::text
+            WHEN annual_realization = 0::numeric THEN 'NOT_STARTED'::text
+            WHEN annual_realization < annual_plan THEN 'IN_PROGRESS'::text
+            WHEN annual_realization = annual_plan THEN 'COMPLETED'::text
+            ELSE 'OVER_REALIZED'::text
+        END AS progress_status
+   FROM fin_v_budget_balance_summary b; |

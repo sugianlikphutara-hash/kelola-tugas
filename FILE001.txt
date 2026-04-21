@@ -1,0 +1,338 @@
+| pg_get_viewdef                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|  WITH version_pairs AS (
+         SELECT new_rv.id AS new_rak_version_id,
+            new_rv.code AS new_rak_code,
+            old_rv.id AS old_rak_version_id,
+            old_rv.code AS old_rak_code,
+            new_rv.fiscal_year_id
+           FROM fin_rak_versions new_rv
+             LEFT JOIN fin_rak_versions old_rv ON old_rv.id = new_rv.previous_rak_version_id
+        ), old_items AS (
+         SELECT vp.new_rak_version_id,
+            vp.new_rak_code,
+            vp.old_rak_version_id,
+            vp.old_rak_code,
+            rsa.sub_activity_id,
+            rbi.budget_account_id,
+            rbi.annual_amount AS old_annual_amount
+           FROM version_pairs vp
+             JOIN fin_rak_sub_activities rsa ON rsa.rak_version_id = vp.old_rak_version_id
+             JOIN fin_rak_budget_items rbi ON rbi.rak_sub_activity_id = rsa.id
+        ), new_items AS (
+         SELECT vp.new_rak_version_id,
+            vp.new_rak_code,
+            vp.old_rak_version_id,
+            vp.old_rak_code,
+            rsa.sub_activity_id,
+            rbi.budget_account_id,
+            rbi.annual_amount AS new_annual_amount,
+            bics.code AS item_change_status_code
+           FROM version_pairs vp
+             JOIN fin_rak_sub_activities rsa ON rsa.rak_version_id = vp.new_rak_version_id
+             JOIN fin_rak_budget_items rbi ON rbi.rak_sub_activity_id = rsa.id
+             JOIN fin_budget_item_change_statuses bics ON bics.id = rbi.item_change_status_id
+        )
+ SELECT COALESCE(n.new_rak_version_id, o.new_rak_version_id) AS new_rak_version_id,
+    COALESCE(n.new_rak_code, o.new_rak_code) AS new_rak_code,
+    COALESCE(n.old_rak_version_id, o.old_rak_version_id) AS old_rak_version_id,
+    COALESCE(n.old_rak_code, o.old_rak_code) AS old_rak_code,
+    COALESCE(n.sub_activity_id, o.sub_activity_id) AS sub_activity_id,
+    sa.code AS sub_activity_code,
+    sa.name AS sub_activity_name,
+    COALESCE(n.budget_account_id, o.budget_account_id) AS budget_account_id,
+    ba.code AS budget_account_code,
+    ba.name AS budget_account_name,
+    COALESCE(o.old_annual_amount, 0::numeric) AS old_annual_amount,
+    COALESCE(n.new_annual_amount, 0::numeric) AS new_annual_amount,
+    COALESCE(n.new_annual_amount, 0::numeric) - COALESCE(o.old_annual_amount, 0::numeric) AS difference_amount,
+        CASE
+            WHEN COALESCE(o.old_annual_amount, 0::numeric) = 0::numeric THEN NULL::numeric
+            ELSE round((COALESCE(n.new_annual_amount, 0::numeric) - COALESCE(o.old_annual_amount, 0::numeric)) / o.old_annual_amount * 100::numeric, 2)
+        END AS difference_percent,
+    COALESCE(n.item_change_status_code,
+        CASE
+            WHEN COALESCE(o.old_annual_amount, 0::numeric) = 0::numeric AND COALESCE(n.new_annual_amount, 0::numeric) > 0::numeric THEN 'BARU'::text
+            WHEN COALESCE(o.old_annual_amount, 0::numeric) > 0::numeric AND COALESCE(n.new_annual_amount, 0::numeric) = 0::numeric THEN 'DIHAPUS'::text
+            WHEN COALESCE(o.old_annual_amount, 0::numeric) <> COALESCE(n.new_annual_amount, 0::numeric) THEN 'BERUBAH'::text
+            ELSE 'TETAP'::text
+        END::character varying) AS change_status_code
+   FROM old_items o
+     FULL JOIN new_items n ON n.new_rak_version_id = o.new_rak_version_id AND n.sub_activity_id = o.sub_activity_id AND n.budget_account_id = o.budget_account_id
+     JOIN sub_activities sa ON sa.id = COALESCE(n.sub_activity_id, o.sub_activity_id)
+     JOIN fin_budget_accounts ba ON ba.id = COALESCE(n.budget_account_id, o.budget_account_id); |
+
+========================================================================================================
+
+| pg_get_functiondef                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CREATE OR REPLACE FUNCTION public.fin_activate_rak_version(p_rak_version_id uuid, p_approved_by uuid DEFAULT NULL::uuid)
+ RETURNS uuid
+ LANGUAGE plpgsql
+AS $function$
+declare
+  v_target_rak public.fin_rak_versions%rowtype;
+begin
+  -- 1. pastikan versi RAK ada
+  select *
+  into v_target_rak
+  from public.fin_rak_versions
+  where id = p_rak_version_id;
+
+  if not found then
+    raise exception 'RAK version not found: %', p_rak_version_id;
+  end if;
+
+  -- 2. arsipkan versi aktif lain pada fiscal year yang sama
+  update public.fin_rak_versions
+  set
+    is_active = false,
+    status = 'ARCHIVED',
+    updated_at = now()
+  where fiscal_year_id = v_target_rak.fiscal_year_id
+    and is_active = true
+    and id <> p_rak_version_id;
+
+  -- 3. aktifkan versi target
+  update public.fin_rak_versions
+  set
+    is_active = true,
+    status = 'ACTIVE',
+    approved_by = coalesce(p_approved_by, approved_by),
+    approved_at = now(),
+    updated_at = now()
+  where id = p_rak_version_id;
+
+  return p_rak_version_id;
+end;
+$function$
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| CREATE OR REPLACE FUNCTION public.fin_clone_rak_version(p_source_rak_version_id uuid, p_new_code character varying, p_new_rak_date date, p_new_title character varying DEFAULT NULL::character varying, p_new_notes text DEFAULT NULL::text, p_created_by uuid DEFAULT NULL::uuid)
+ RETURNS uuid
+ LANGUAGE plpgsql
+AS $function$
+declare
+  v_source_rak public.fin_rak_versions%rowtype;
+  v_new_rak_version_id uuid;
+  v_new_version_number integer;
+  v_new_rak_sub_activity_id uuid;
+  v_new_rak_budget_item_id uuid;
+  v_sub record;
+  v_item record;
+  v_detail record;
+begin
+  -- 1. pastikan versi sumber ada
+  select *
+  into v_source_rak
+  from public.fin_rak_versions
+  where id = p_source_rak_version_id;
+
+  if not found then
+    raise exception 'Source RAK version not found: %', p_source_rak_version_id;
+  end if;
+
+  -- 2. pastikan code baru belum dipakai pada fiscal year yang sama
+  if exists (
+    select 1
+    from public.fin_rak_versions
+    where fiscal_year_id = v_source_rak.fiscal_year_id
+      and code = p_new_code
+  ) then
+    raise exception 'RAK code % already exists in the same fiscal year', p_new_code;
+  end if;
+
+  -- 3. tentukan version_number baru
+  select coalesce(max(version_number), 0) + 1
+  into v_new_version_number
+  from public.fin_rak_versions
+  where fiscal_year_id = v_source_rak.fiscal_year_id;
+
+  -- 4. buat header versi RAK baru
+  insert into public.fin_rak_versions (
+    fiscal_year_id,
+    code,
+    version_number,
+    title,
+    rak_date,
+    previous_rak_version_id,
+    status,
+    is_active,
+    notes,
+    created_by,
+    approved_by,
+    approved_at
+  )
+  values (
+    v_source_rak.fiscal_year_id,
+    p_new_code,
+    v_new_version_number,
+    p_new_title,
+    p_new_rak_date,
+    v_source_rak.id,
+    'DRAFT',
+    false,
+    p_new_notes,
+    p_created_by,
+    null,
+    null
+  )
+  returning id into v_new_rak_version_id;
+
+  -- 5. siapkan mapping sementara sub kegiatan lama -> baru
+  create temporary table if not exists pg_temp.tmp_fin_rak_sub_activity_map (
+    old_id uuid,
+    new_id uuid
+  ) on commit drop;
+
+  truncate table pg_temp.tmp_fin_rak_sub_activity_map;
+
+  -- 6. copy sub kegiatan
+  for v_sub in
+    select *
+    from public.fin_rak_sub_activities
+    where rak_version_id = p_source_rak_version_id
+    order by created_at, id
+  loop
+    insert into public.fin_rak_sub_activities (
+      rak_version_id,
+      sub_activity_id,
+      sub_activity_status_id,
+      remarks
+    )
+    values (
+      v_new_rak_version_id,
+      v_sub.sub_activity_id,
+      v_sub.sub_activity_status_id,
+      v_sub.remarks
+    )
+    returning id into v_new_rak_sub_activity_id;
+
+    insert into pg_temp.tmp_fin_rak_sub_activity_map (old_id, new_id)
+    values (v_sub.id, v_new_rak_sub_activity_id);
+  end loop;
+
+  -- 7. siapkan mapping sementara item lama -> baru
+  create temporary table if not exists pg_temp.tmp_fin_rak_budget_item_map (
+    old_id uuid,
+    new_id uuid
+  ) on commit drop;
+
+  truncate table pg_temp.tmp_fin_rak_budget_item_map;
+
+  -- 8. copy item anggaran
+  for v_item in
+    select rbi.*
+    from public.fin_rak_budget_items rbi
+    where rbi.rak_version_id = p_source_rak_version_id
+    order by rbi.created_at, rbi.id
+  loop
+    insert into public.fin_rak_budget_items (
+      rak_version_id,
+      rak_sub_activity_id,
+      budget_account_id,
+      item_change_status_id,
+      annual_amount,
+      jan_amount,
+      feb_amount,
+      mar_amount,
+      apr_amount,
+      may_amount,
+      jun_amount,
+      jul_amount,
+      aug_amount,
+      sep_amount,
+      oct_amount,
+      nov_amount,
+      dec_amount,
+      remarks
+    )
+    values (
+      v_new_rak_version_id,
+      (select m.new_id
+       from pg_temp.tmp_fin_rak_sub_activity_map m
+       where m.old_id = v_item.rak_sub_activity_id),
+      v_item.budget_account_id,
+      v_item.item_change_status_id,
+      v_item.annual_amount,
+      v_item.jan_amount,
+      v_item.feb_amount,
+      v_item.mar_amount,
+      v_item.apr_amount,
+      v_item.may_amount,
+      v_item.jun_amount,
+      v_item.jul_amount,
+      v_item.aug_amount,
+      v_item.sep_amount,
+      v_item.oct_amount,
+      v_item.nov_amount,
+      v_item.dec_amount,
+      v_item.remarks
+    )
+    returning id into v_new_rak_budget_item_id;
+
+    insert into pg_temp.tmp_fin_rak_budget_item_map (old_id, new_id)
+    values (v_item.id, v_new_rak_budget_item_id);
+  end loop;
+
+  -- 9. copy detail item (opsional, kalau ada)
+  for v_detail in
+    select d.*
+    from public.fin_rak_budget_item_details d
+    join pg_temp.tmp_fin_rak_budget_item_map m
+      on m.old_id = d.rak_budget_item_id
+    order by d.created_at, d.id
+  loop
+    insert into public.fin_rak_budget_item_details (
+      rak_budget_item_id,
+      item_name,
+      specification,
+      volume,
+      unit,
+      unit_price,
+      ppn_percent,
+      total_amount,
+      source_document_type,
+      remarks
+    )
+    values (
+      (select m.new_id
+       from pg_temp.tmp_fin_rak_budget_item_map m
+       where m.old_id = v_detail.rak_budget_item_id),
+      v_detail.item_name,
+      v_detail.specification,
+      v_detail.volume,
+      v_detail.unit,
+      v_detail.unit_price,
+      v_detail.ppn_percent,
+      v_detail.total_amount,
+      v_detail.source_document_type,
+      v_detail.remarks
+    );
+  end loop;
+
+  return v_new_rak_version_id;
+end;
+$function$
+ |
+
+
+====================================================================
+
+
+
+| table_name                  | column_name          | data_type                | is_nullable | column_default           |
+| --------------------------- | -------------------- | ------------------------ | ----------- | ------------------------ |
+| fin_rak_budget_item_details | id                   | uuid                     | NO          | gen_random_uuid()        |
+| fin_rak_budget_item_details | rak_budget_item_id   | uuid                     | NO          | null                     |
+| fin_rak_budget_item_details | item_name            | character varying        | YES         | null                     |
+| fin_rak_budget_item_details | specification        | text                     | YES         | null                     |
+| fin_rak_budget_item_details | volume               | numeric                  | YES         | null                     |
+| fin_rak_budget_item_details | unit                 | character varying        | YES         | null                     |
+| fin_rak_budget_item_details | unit_price           | numeric                  | YES         | null                     |
+| fin_rak_budget_item_details | ppn_percent          | numeric                  | NO          | 0                        |
+| fin_rak_budget_item_details | total_amount         | numeric                  | NO          | 0                        |
+| fin_rak_budget_item_details | source_document_type | character varying        | NO          | 'DPA'::character varying |
+| fin_rak_budget_item_details | remarks              | text                     | YES         | null                     |
+| fin_rak_budget_item_details | created_at           | timestamp with time zone | NO          | now()                    |
+| fin_rak_budget_item_details | updated_at           | timestamp with time zone | NO          | now()                    |
+

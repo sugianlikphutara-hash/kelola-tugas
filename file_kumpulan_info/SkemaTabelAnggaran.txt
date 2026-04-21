@@ -1,0 +1,139 @@
+Ini tabel yang sudah saya buat di supabase yang berhubungan dengan rencana pembuatan halaman anggaran.
+
+1. Tabel Kegiatan
+
+create table public.activities (
+  id uuid not null default gen_random_uuid (),
+  program_id uuid null,
+  code character varying(50) not null,
+  name character varying(255) not null,
+  description text null,
+  status_id uuid null,
+  priority_id uuid null,
+  start_date date null,
+  end_date date null,
+  created_by uuid null,
+  approved_by uuid null,
+  approved_at timestamp with time zone null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  constraint activities_pkey primary key (id),
+  constraint activities_approved_by_fkey foreign KEY (approved_by) references employees (id),
+  constraint activities_created_by_fkey foreign KEY (created_by) references employees (id),
+  constraint activities_priority_id_fkey foreign KEY (priority_id) references master_priorities (id),
+  constraint activities_program_id_fkey foreign KEY (program_id) references programs (id) on delete CASCADE,
+  constraint activities_status_id_fkey foreign KEY (status_id) references master_statuses (id)
+) TABLESPACE pg_default;
+
+2. Tabel Realisasi Anggaran
+
+create table public.budget_realizations (
+  id uuid not null default gen_random_uuid (),
+  budget_id uuid null,
+  realization_date date not null,
+  amount numeric not null,
+  description text null,
+  document_id uuid null,
+  created_by uuid null,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  constraint budget_realizations_pkey primary key (id),
+  constraint budget_realizations_budget_id_fkey foreign KEY (budget_id) references budgets (id) on delete CASCADE,
+  constraint budget_realizations_created_by_fkey foreign KEY (created_by) references employees (id) on delete set null,
+  constraint budget_realizations_document_id_fkey foreign KEY (document_id) references documents (id) on delete set null
+) TABLESPACE pg_default;
+
+create index IF not exists idx_budget_realizations_budget_id on public.budget_realizations using btree (budget_id) TABLESPACE pg_default;
+
+create trigger trg_budget_realizations_updated_at BEFORE
+update on budget_realizations for EACH row
+execute FUNCTION set_updated_at ();
+
+3. Tabel Belanja
+
+create table public.budgets (
+  id uuid not null default gen_random_uuid (),
+  sub_activity_id uuid null,
+  name character varying(255) null,
+  amount_planned numeric null,
+  amount_realized numeric null,
+  created_at timestamp with time zone null default now(),
+  constraint budgets_pkey primary key (id),
+  constraint budgets_sub_activity_id_fkey foreign KEY (sub_activity_id) references sub_activities (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+4. Tabel Tahun Fiskal
+
+create table public.fiscal_years (
+  id uuid not null default gen_random_uuid (),
+  year integer not null,
+  name character varying(100) null,
+  start_date date not null,
+  end_date date not null,
+  is_active boolean not null default false,
+  created_at timestamp with time zone not null default now(),
+  updated_at timestamp with time zone not null default now(),
+  constraint fiscal_years_pkey primary key (id),
+  constraint fiscal_years_year_key unique (year)
+) TABLESPACE pg_default;
+
+create trigger trg_fiscal_years_updated_at BEFORE
+update on fiscal_years for EACH row
+execute FUNCTION set_updated_at ();
+
+5. Tabel Program
+
+create table public.programs (
+  id uuid not null default gen_random_uuid (),
+  fiscal_year_id uuid null,
+  unit_id uuid null,
+  code character varying(50) not null,
+  name character varying(255) not null,
+  description text null,
+  status_id uuid null,
+  priority_id uuid null,
+  start_date date null,
+  end_date date null,
+  created_by uuid null,
+  approved_by uuid null,
+  approved_at timestamp with time zone null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  constraint programs_pkey primary key (id),
+  constraint programs_code_key unique (code),
+  constraint programs_fiscal_year_id_fkey foreign KEY (fiscal_year_id) references fiscal_years (id),
+  constraint programs_priority_id_fkey foreign KEY (priority_id) references master_priorities (id),
+  constraint programs_status_id_fkey foreign KEY (status_id) references master_statuses (id),
+  constraint programs_approved_by_fkey foreign KEY (approved_by) references employees (id),
+  constraint programs_unit_id_fkey foreign KEY (unit_id) references units (id),
+  constraint programs_created_by_fkey foreign KEY (created_by) references employees (id)
+) TABLESPACE pg_default;
+
+6. Tabel Sub Kegiatan 
+
+create table public.sub_activities (
+  id uuid not null default gen_random_uuid (),
+  activity_id uuid null,
+  code character varying(50) null,
+  name character varying(255) not null,
+  description text null,
+  status_id uuid null,
+  priority_id uuid null,
+  output_unit_id uuid null,
+  start_date date null,
+  end_date date null,
+  output_target numeric null,
+  created_by uuid null,
+  approved_by uuid null,
+  approved_at timestamp with time zone null,
+  created_at timestamp with time zone null default now(),
+  updated_at timestamp with time zone null default now(),
+  output_unit text null,
+  constraint sub_activities_pkey primary key (id),
+  constraint sub_activities_approved_by_fkey foreign KEY (approved_by) references employees (id),
+  constraint sub_activities_created_by_fkey foreign KEY (created_by) references employees (id),
+  constraint sub_activities_activity_id_fkey foreign KEY (activity_id) references activities (id) on delete CASCADE,
+  constraint sub_activities_priority_id_fkey foreign KEY (priority_id) references master_priorities (id),
+  constraint sub_activities_status_id_fkey foreign KEY (status_id) references master_statuses (id),
+  constraint sub_activities_output_unit_id_fkey foreign KEY (output_unit_id) references master_output_units (id)
+) TABLESPACE pg_default;

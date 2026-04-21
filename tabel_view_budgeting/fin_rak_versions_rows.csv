@@ -1,0 +1,2 @@
+id,fiscal_year_id,code,version_number,title,rak_date,previous_rak_version_id,status,is_active,notes,created_by,approved_by,approved_at,created_at,updated_at
+2eca0473-b1c0-44f2-9e90-daff74de35ed,03edd7f7-0ac4-4506-9746-64a90011c554,RAK-20260102,1,RAK Awal Tahun 2026,2026-01-02,,ACTIVE,true,Baseline awal RAK global tahun 2026,,,,2026-04-19 08:07:43.781122+00,2026-04-19 08:07:43.781122+00

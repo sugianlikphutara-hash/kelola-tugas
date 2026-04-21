@@ -1,0 +1,99 @@
+.sidebar {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  z-index: 99999 !important;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.sidebar div::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.sidebar div {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.sidebar-nav-button {
+  position: relative;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  margin: 10px auto !important;
+  width: 44px !important;
+  height: 44px !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  cursor: pointer !important;
+  transition: transform 140ms ease !important;
+  z-index: 10001; /* Ensure button is above other content */
+}
+
+.sidebar-nav-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 12px !important;
+  background: transparent !important;
+  border: none !important;
+  color: #1A1A1B; /* Inaktif */
+  transition: color 140ms ease !important;
+}
+
+.sidebar-nav-button[aria-current="page"] .sidebar-nav-icon {
+  color: #9CA3AF !important; /* Aktif */
+}
+
+.sidebar-nav-button:hover .sidebar-nav-icon {
+  color: #9CA3AF !important; /* Hover */
+}
+
+.sidebar-tooltip {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 6px;
+  background-color: #389d0d; /* dark charcoal for contrast */
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transition: opacity 160ms ease, visibility 160ms ease, transform 160ms ease;
+  z-index: 99999 !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.sidebar-nav-button:hover .sidebar-tooltip {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: translateY(-50%) translateX(5px);
+}
+
+@media (prefers-color-scheme: dark) {
+  /* Dark mode: make active/hover clearly distinct (accent), keep inactive muted. */
+  .sidebar-nav-icon {
+    color: var(--text-muted) !important;
+  }
+
+  .sidebar-nav-button[aria-current="page"] .sidebar-nav-icon {
+    color: #19b5b2 !important;
+  }
+
+  .sidebar-nav-button:hover .sidebar-nav-icon {
+    color: #19b5b2 !important;
+  }
+}
