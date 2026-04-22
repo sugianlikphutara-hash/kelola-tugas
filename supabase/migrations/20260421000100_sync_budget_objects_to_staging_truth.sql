@@ -306,7 +306,9 @@ begin
 end;
 $function$;
 
-create or replace view public.fin_v_tracking_rak_changes as
+drop view if exists public.fin_v_tracking_rak_changes;
+
+create view public.fin_v_tracking_rak_changes as
 with version_pairs as (
   select
     new_rv.id as new_rak_version_id,
@@ -380,142 +382,188 @@ full join new_items n
 join sub_activities sa on sa.id = coalesce(n.sub_activity_id, o.sub_activity_id)
 join fin_budget_accounts ba on ba.id = coalesce(n.budget_account_id, o.budget_account_id);
 
-create or replace view public.fin_v_budget_balance_summary as
-with active_rak as (
-  select
-    rv.id,
-    rv.fiscal_year_id,
-    rv.code,
-    rv.version_number,
-    rv.title,
-    rv.rak_date,
-    rv.previous_rak_version_id,
-    rv.status,
-    rv.is_active,
-    rv.notes,
-    rv.created_by,
-    rv.approved_by,
-    rv.approved_at,
-    rv.created_at,
-    rv.updated_at
-  from fin_rak_versions rv
-  where rv.is_active = true
-),
-plan_data as (
-  select
-    rv.fiscal_year_id,
-    rv.id as rak_version_id,
-    rv.code as rak_code,
-    rsa.sub_activity_id,
-    rbi.budget_account_id,
-    rbi.annual_amount,
-    rbi.jan_amount,
-    rbi.feb_amount,
-    rbi.mar_amount,
-    rbi.apr_amount,
-    rbi.may_amount,
-    rbi.jun_amount,
-    rbi.jul_amount,
-    rbi.aug_amount,
-    rbi.sep_amount,
-    rbi.oct_amount,
-    rbi.nov_amount,
-    rbi.dec_amount
-  from active_rak rv
-  join fin_rak_sub_activities rsa on rsa.rak_version_id = rv.id
-  join fin_rak_budget_items rbi on rbi.rak_sub_activity_id = rsa.id
-),
-realization_data as (
-  select
-    br.fiscal_year_id,
-    br.sub_activity_id,
-    br.budget_account_id,
-    sum(br.amount) as annual_realization,
-    sum(case when br.period_month = 1 then br.amount else 0::numeric end) as jan_amount,
-    sum(case when br.period_month = 2 then br.amount else 0::numeric end) as feb_amount,
-    sum(case when br.period_month = 3 then br.amount else 0::numeric end) as mar_amount,
-    sum(case when br.period_month = 4 then br.amount else 0::numeric end) as apr_amount,
-    sum(case when br.period_month = 5 then br.amount else 0::numeric end) as may_amount,
-    sum(case when br.period_month = 6 then br.amount else 0::numeric end) as jun_amount,
-    sum(case when br.period_month = 7 then br.amount else 0::numeric end) as jul_amount,
-    sum(case when br.period_month = 8 then br.amount else 0::numeric end) as aug_amount,
-    sum(case when br.period_month = 9 then br.amount else 0::numeric end) as sep_amount,
-    sum(case when br.period_month = 10 then br.amount else 0::numeric end) as oct_amount,
-    sum(case when br.period_month = 11 then br.amount else 0::numeric end) as nov_amount,
-    sum(case when br.period_month = 12 then br.amount else 0::numeric end) as dec_amount
-  from fin_budget_realizations br
-  group by br.fiscal_year_id, br.sub_activity_id, br.budget_account_id
-)
-select
-  p.fiscal_year_id,
-  p.rak_version_id,
-  p.rak_code,
-  p.sub_activity_id,
-  sa.code as sub_activity_code,
-  sa.name as sub_activity_name,
-  p.budget_account_id,
-  ba.code as budget_account_code,
-  ba.name as budget_account_name,
-  p.annual_amount as annual_plan,
-  coalesce(r.annual_realization, 0::numeric) as annual_realization,
-  p.annual_amount - coalesce(r.annual_realization, 0::numeric) as annual_balance,
-  case
-    when p.annual_amount = 0::numeric then 0::numeric
-    else round(coalesce(r.annual_realization, 0::numeric) / p.annual_amount * 100::numeric, 2)
-  end as absorption_percent,
-  p.jan_amount as jan_plan,
-  coalesce(r.jan_amount, 0::numeric) as jan_realization,
-  p.jan_amount - coalesce(r.jan_amount, 0::numeric) as jan_balance,
-  p.feb_amount as feb_plan,
-  coalesce(r.feb_amount, 0::numeric) as feb_realization,
-  p.feb_amount - coalesce(r.feb_amount, 0::numeric) as feb_balance,
-  p.mar_amount as mar_plan,
-  coalesce(r.mar_amount, 0::numeric) as mar_realization,
-  p.mar_amount - coalesce(r.mar_amount, 0::numeric) as mar_balance,
-  p.apr_amount as apr_plan,
-  coalesce(r.apr_amount, 0::numeric) as apr_realization,
-  p.apr_amount - coalesce(r.apr_amount, 0::numeric) as apr_balance,
-  p.may_amount as may_plan,
-  coalesce(r.may_amount, 0::numeric) as may_realization,
-  p.may_amount - coalesce(r.may_amount, 0::numeric) as may_balance,
-  p.jun_amount as jun_plan,
-  coalesce(r.jun_amount, 0::numeric) as jun_realization,
-  p.jun_amount - coalesce(r.jun_amount, 0::numeric) as jun_balance,
-  p.jul_amount as jul_plan,
-  coalesce(r.jul_amount, 0::numeric) as jul_realization,
-  p.jul_amount - coalesce(r.jul_amount, 0::numeric) as jul_balance,
-  p.aug_amount as aug_plan,
-  coalesce(r.aug_amount, 0::numeric) as aug_realization,
-  p.aug_amount - coalesce(r.aug_amount, 0::numeric) as aug_balance,
-  p.sep_amount as sep_plan,
-  coalesce(r.sep_amount, 0::numeric) as sep_realization,
-  p.sep_amount - coalesce(r.sep_amount, 0::numeric) as sep_balance,
-  p.oct_amount as oct_plan,
-  coalesce(r.oct_amount, 0::numeric) as oct_realization,
-  p.oct_amount - coalesce(r.oct_amount, 0::numeric) as oct_balance,
-  p.nov_amount as nov_plan,
-  coalesce(r.nov_amount, 0::numeric) as nov_realization,
-  p.nov_amount - coalesce(r.nov_amount, 0::numeric) as nov_balance,
-  p.dec_amount as dec_plan,
-  coalesce(r.dec_amount, 0::numeric) as dec_realization,
-  p.dec_amount - coalesce(r.dec_amount, 0::numeric) as dec_balance,
-  case
-    when p.annual_amount = 0::numeric and coalesce(r.annual_realization, 0::numeric) = 0::numeric then 'NO_PLAN_NO_REALIZATION'::text
-    when p.annual_amount = 0::numeric and coalesce(r.annual_realization, 0::numeric) > 0::numeric then 'REALIZATION_WITHOUT_PLAN'::text
-    when coalesce(r.annual_realization, 0::numeric) > p.annual_amount then 'OVER_BUDGET'::text
-    when coalesce(r.annual_realization, 0::numeric) = p.annual_amount then 'FULLY_ABSORBED'::text
-    when coalesce(r.annual_realization, 0::numeric) = 0::numeric then 'NO_REALIZATION'::text
-    else 'NORMAL'::text
-  end as balance_status
-from plan_data p
-join sub_activities sa on sa.id = p.sub_activity_id
-join fin_budget_accounts ba on ba.id = p.budget_account_id
-left join realization_data r
-  on r.fiscal_year_id = p.fiscal_year_id
- and r.sub_activity_id = p.sub_activity_id
- and r.budget_account_id = p.budget_account_id;
+-- NOTE: drop dependent views first (no cascade) so parent can be dropped safely.
+drop view if exists public.fin_v_tracking_budget_deviations;
+drop view if exists public.fin_v_tracking_budget_warnings;
+drop view if exists public.fin_v_tracking_budget_progress;
+drop view if exists public.fin_v_budget_balance_unpivot;
+drop view if exists public.fin_v_budget_balance_summary;
 
-create or replace view public.fin_v_budget_balance_unpivot as
+create view public.fin_v_budget_balance_summary as
+WITH active_rak AS (
+         SELECT rv.id,
+            rv.fiscal_year_id,
+            rv.code,
+            rv.version_number,
+            rv.title,
+            rv.rak_date,
+            rv.previous_rak_version_id,
+            rv.status,
+            rv.is_active,
+            rv.notes,
+            rv.created_by,
+            rv.approved_by,
+            rv.approved_at,
+            rv.created_at,
+            rv.updated_at
+           FROM fin_rak_versions rv
+          WHERE rv.is_active = true
+        ), plan_data AS (
+         SELECT rv.fiscal_year_id,
+            rv.id AS rak_version_id,
+            rv.code AS rak_code,
+            rsa.sub_activity_id,
+            rbi.budget_account_id,
+            rbi.annual_amount,
+            rbi.jan_amount,
+            rbi.feb_amount,
+            rbi.mar_amount,
+            rbi.apr_amount,
+            rbi.may_amount,
+            rbi.jun_amount,
+            rbi.jul_amount,
+            rbi.aug_amount,
+            rbi.sep_amount,
+            rbi.oct_amount,
+            rbi.nov_amount,
+            rbi.dec_amount
+           FROM active_rak rv
+             JOIN fin_rak_sub_activities rsa ON rsa.rak_version_id = rv.id
+             JOIN fin_rak_budget_items rbi ON rbi.rak_sub_activity_id = rsa.id
+        ), realization_data AS (
+         SELECT br.fiscal_year_id,
+            br.sub_activity_id,
+            br.budget_account_id,
+            sum(br.amount) AS annual_realization,
+            sum(
+                CASE
+                    WHEN br.period_month = 1 THEN br.amount
+                    ELSE 0::numeric
+                END) AS jan_amount,
+            sum(
+                CASE
+                    WHEN br.period_month = 2 THEN br.amount
+                    ELSE 0::numeric
+                END) AS feb_amount,
+            sum(
+                CASE
+                    WHEN br.period_month = 3 THEN br.amount
+                    ELSE 0::numeric
+                END) AS mar_amount,
+            sum(
+                CASE
+                    WHEN br.period_month = 4 THEN br.amount
+                    ELSE 0::numeric
+                END) AS apr_amount,
+            sum(
+                CASE
+                    WHEN br.period_month = 5 THEN br.amount
+                    ELSE 0::numeric
+                END) AS may_amount,
+            sum(
+                CASE
+                    WHEN br.period_month = 6 THEN br.amount
+                    ELSE 0::numeric
+                END) AS jun_amount,
+            sum(
+                CASE
+                    WHEN br.period_month = 7 THEN br.amount
+                    ELSE 0::numeric
+                END) AS jul_amount,
+            sum(
+                CASE
+                    WHEN br.period_month = 8 THEN br.amount
+                    ELSE 0::numeric
+                END) AS aug_amount,
+            sum(
+                CASE
+                    WHEN br.period_month = 9 THEN br.amount
+                    ELSE 0::numeric
+                END) AS sep_amount,
+            sum(
+                CASE
+                    WHEN br.period_month = 10 THEN br.amount
+                    ELSE 0::numeric
+                END) AS oct_amount,
+            sum(
+                CASE
+                    WHEN br.period_month = 11 THEN br.amount
+                    ELSE 0::numeric
+                END) AS nov_amount,
+            sum(
+                CASE
+                    WHEN br.period_month = 12 THEN br.amount
+                    ELSE 0::numeric
+                END) AS dec_amount
+           FROM fin_budget_realizations br
+          GROUP BY br.fiscal_year_id, br.sub_activity_id, br.budget_account_id
+        )
+ SELECT p.fiscal_year_id,
+    p.rak_version_id,
+    p.rak_code,
+    p.sub_activity_id,
+    sa.code AS sub_activity_code,
+    sa.name AS sub_activity_name,
+    p.budget_account_id,
+    ba.code AS budget_account_code,
+    ba.name AS budget_account_name,
+    p.annual_amount AS annual_plan,
+    COALESCE(r.annual_realization, 0::numeric) AS annual_realization,
+    p.annual_amount - COALESCE(r.annual_realization, 0::numeric) AS annual_balance,
+        CASE
+            WHEN p.annual_amount = 0::numeric THEN 0::numeric
+            ELSE round(COALESCE(r.annual_realization, 0::numeric) / p.annual_amount * 100::numeric, 2)
+        END AS absorption_percent,
+    p.jan_amount AS jan_plan,
+    COALESCE(r.jan_amount, 0::numeric) AS jan_realization,
+    p.jan_amount - COALESCE(r.jan_amount, 0::numeric) AS jan_balance,
+    p.feb_amount AS feb_plan,
+    COALESCE(r.feb_amount, 0::numeric) AS feb_realization,
+    p.feb_amount - COALESCE(r.feb_amount, 0::numeric) AS feb_balance,
+    p.mar_amount AS mar_plan,
+    COALESCE(r.mar_amount, 0::numeric) AS mar_realization,
+    p.mar_amount - COALESCE(r.mar_amount, 0::numeric) AS mar_balance,
+    p.apr_amount AS apr_plan,
+    COALESCE(r.apr_amount, 0::numeric) AS apr_realization,
+    p.apr_amount - COALESCE(r.apr_amount, 0::numeric) AS apr_balance,
+    p.may_amount AS may_plan,
+    COALESCE(r.may_amount, 0::numeric) AS may_realization,
+    p.may_amount - COALESCE(r.may_amount, 0::numeric) AS may_balance,
+    p.jun_amount AS jun_plan,
+    COALESCE(r.jun_amount, 0::numeric) AS jun_realization,
+    p.jun_amount - COALESCE(r.jun_amount, 0::numeric) AS jun_balance,
+    p.jul_amount AS jul_plan,
+    COALESCE(r.jul_amount, 0::numeric) AS jul_realization,
+    p.jul_amount - COALESCE(r.jul_amount, 0::numeric) AS jul_balance,
+    p.aug_amount AS aug_plan,
+    COALESCE(r.aug_amount, 0::numeric) AS aug_realization,
+    p.aug_amount - COALESCE(r.aug_amount, 0::numeric) AS aug_balance,
+    p.sep_amount AS sep_plan,
+    COALESCE(r.sep_amount, 0::numeric) AS sep_realization,
+    p.sep_amount - COALESCE(r.sep_amount, 0::numeric) AS sep_balance,
+    p.oct_amount AS oct_plan,
+    COALESCE(r.oct_amount, 0::numeric) AS oct_realization,
+    p.oct_amount - COALESCE(r.oct_amount, 0::numeric) AS oct_balance,
+    p.nov_amount AS nov_plan,
+    COALESCE(r.nov_amount, 0::numeric) AS nov_realization,
+    p.nov_amount - COALESCE(r.nov_amount, 0::numeric) AS nov_balance,
+    p.dec_amount AS dec_plan,
+    COALESCE(r.dec_amount, 0::numeric) AS dec_realization,
+    p.dec_amount - COALESCE(r.dec_amount, 0::numeric) AS dec_balance,
+        CASE
+            WHEN p.annual_amount = 0::numeric AND COALESCE(r.annual_realization, 0::numeric) = 0::numeric THEN 'NO_PLAN_NO_REALIZATION'::text
+            WHEN p.annual_amount = 0::numeric AND COALESCE(r.annual_realization, 0::numeric) > 0::numeric THEN 'REALIZATION_WITHOUT_PLAN'::text
+            WHEN COALESCE(r.annual_realization, 0::numeric) > p.annual_amount THEN 'OVER_BUDGET'::text
+            WHEN COALESCE(r.annual_realization, 0::numeric) = p.annual_amount THEN 'FULLY_ABSORBED'::text
+            WHEN COALESCE(r.annual_realization, 0::numeric) = 0::numeric THEN 'NO_REALIZATION'::text
+            ELSE 'NORMAL'::text
+        END AS balance_status
+   FROM plan_data p
+     JOIN sub_activities sa ON sa.id = p.sub_activity_id
+     JOIN fin_budget_accounts ba ON ba.id = p.budget_account_id
+     LEFT JOIN realization_data r ON r.fiscal_year_id = p.fiscal_year_id AND r.sub_activity_id = p.sub_activity_id AND r.budget_account_id = p.budget_account_id;
+
+create view public.fin_v_budget_balance_unpivot as
 select fiscal_year_id, rak_version_id, rak_code, sub_activity_id, sub_activity_code, sub_activity_name,
        budget_account_id, budget_account_code, budget_account_name,
        'JAN'::text as month, 1 as period_month, jan_plan as plan, jan_realization as realization, jan_balance as balance
@@ -576,7 +624,7 @@ select fiscal_year_id, rak_version_id, rak_code, sub_activity_id, sub_activity_c
        'DEC'::text as month, 12 as period_month, dec_plan as plan, dec_realization as realization, dec_balance as balance
 from fin_v_budget_balance_summary;
 
-create or replace view public.fin_v_tracking_budget_progress as
+create view public.fin_v_tracking_budget_progress as
 select
   fiscal_year_id,
   rak_version_id,
@@ -599,32 +647,60 @@ select
   end as progress_status
 from fin_v_budget_balance_summary b;
 
-create or replace view public.fin_v_tracking_budget_warnings as
-select
-  fiscal_year_id,
-  rak_version_id,
-  rak_code,
-  sub_activity_id,
-  sub_activity_code,
-  sub_activity_name,
-  budget_account_id,
-  budget_account_code,
-  budget_account_name,
-  annual_plan,
-  annual_realization,
-  annual_balance,
-  absorption_percent,
-  case
-    when annual_plan = 0::numeric and annual_realization > 0::numeric then 'REALIZATION_WITHOUT_PLAN'::text
-    when annual_realization > annual_plan then 'OVER_BUDGET'::text
-    when annual_plan > 0::numeric and annual_realization = 0::numeric then 'NO_REALIZATION'::text
-    when absorption_percent >= 90::numeric and absorption_percent < 100::numeric then 'FAST_ABSORPTION'::text
-    else null::text
-  end as warning_type
-from fin_v_budget_balance_summary b
-where (annual_plan = 0::numeric and annual_realization > 0::numeric)
-   or (annual_realization > annual_plan)
-   or (annual_plan > 0::numeric and annual_realization = 0::numeric)
-   or (absorption_percent >= 90::numeric and absorption_percent < 100::numeric);
+create view public.fin_v_tracking_budget_warnings as
+SELECT fiscal_year_id,
+    rak_version_id,
+    rak_code,
+    sub_activity_id,
+    sub_activity_code,
+    sub_activity_name,
+    budget_account_id,
+    budget_account_code,
+    budget_account_name,
+    annual_plan,
+    annual_realization,
+    annual_balance,
+    absorption_percent,
+        CASE
+            WHEN annual_plan = 0::numeric AND annual_realization > 0::numeric THEN 'REALIZATION_WITHOUT_PLAN'::text
+            WHEN annual_realization > annual_plan THEN 'OVER_BUDGET'::text
+            WHEN annual_plan > 0::numeric AND annual_realization = 0::numeric THEN 'NO_REALIZATION'::text
+            WHEN absorption_percent >= 90::numeric AND absorption_percent < 100::numeric THEN 'FAST_ABSORPTION'::text
+            ELSE NULL::text
+        END AS warning_type
+   FROM fin_v_budget_balance_summary b
+  WHERE annual_plan = 0::numeric AND annual_realization > 0::numeric OR annual_realization > annual_plan OR annual_plan > 0::numeric AND annual_realization = 0::numeric OR absorption_percent >= 90::numeric AND absorption_percent < 100::numeric;
+
+create view public.fin_v_tracking_budget_deviations as
+SELECT fiscal_year_id,
+    rak_version_id,
+    rak_code,
+    sub_activity_id,
+    sub_activity_code,
+    sub_activity_name,
+    budget_account_id,
+    budget_account_code,
+    budget_account_name,
+    annual_plan,
+    annual_realization,
+    annual_balance,
+        CASE
+            WHEN annual_plan = 0::numeric THEN NULL::numeric
+            ELSE round(annual_balance / annual_plan * 100::numeric, 2)
+        END AS annual_deviation_percent,
+    balance_status,
+    jan_plan - jan_realization AS jan_deviation,
+    feb_plan - feb_realization AS feb_deviation,
+    mar_plan - mar_realization AS mar_deviation,
+    apr_plan - apr_realization AS apr_deviation,
+    may_plan - may_realization AS may_deviation,
+    jun_plan - jun_realization AS jun_deviation,
+    jul_plan - jul_realization AS jul_deviation,
+    aug_plan - aug_realization AS aug_deviation,
+    sep_plan - sep_realization AS sep_deviation,
+    oct_plan - oct_realization AS oct_deviation,
+    nov_plan - nov_realization AS nov_deviation,
+    dec_plan - dec_realization AS dec_deviation
+   FROM fin_v_budget_balance_summary b;
 
 commit;
