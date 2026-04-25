@@ -1,21 +1,6 @@
 import { supabase } from "../lib/supabaseClient";
 import { getDefaultRakVersion, getRakVersionById } from "./budgetRakService";
 
-const MONTH_KEYS = [
-  "jan",
-  "feb",
-  "mar",
-  "apr",
-  "may",
-  "jun",
-  "jul",
-  "aug",
-  "sep",
-  "oct",
-  "nov",
-  "dec",
-];
-
 async function unwrapQueryResult(promise) {
   const { data, error } = await promise;
 
@@ -34,13 +19,6 @@ function toNumericAmount(value) {
 
 function toRequestKey(rakVersionId, scopeKey = "all") {
   return `${rakVersionId || "default"}:${scopeKey}`;
-}
-
-function sumMonthlyValues(row, suffix) {
-  return MONTH_KEYS.reduce(
-    (sum, monthKey) => sum + toNumericAmount(row?.[`${monthKey}_${suffix}`]),
-    0
-  );
 }
 
 function isExpectedBalanceRow(row) {
@@ -77,43 +55,34 @@ async function resolveRealizationRakVersion(rakVersionId, fiscalYearId = null) {
   return await getDefaultRakVersion(fiscalYearId);
 }
 
-function mapRealizationSummaryRow(summaryRow, detailAggregate = null) {
-  const annualPlan = toNumericAmount(summaryRow?.annual_amount);
-  const annualRealization = toNumericAmount(detailAggregate?.annual_realization);
+function mapRealizationSummaryRow(summaryRow) {
+  const monthlyPlan = toNumericAmount(summaryRow?.plan_amount);
+  const monthlyRealization = toNumericAmount(summaryRow?.realization_amount);
 
   return {
     ...summaryRow,
-    annual_plan: annualPlan,
-    annual_realization: annualRealization,
-    annual_balance: annualPlan - annualRealization,
-    detail_annual_plan: toNumericAmount(detailAggregate?.annual_plan),
-    detail_annual_balance: toNumericAmount(detailAggregate?.annual_balance),
+    plan_amount: monthlyPlan,
+    realization_amount: monthlyRealization,
+    deviation_amount: monthlyPlan - monthlyRealization,
   };
 }
 
 function mapRealizationDetailRow(row) {
-  const annualPlan = toNumericAmount(row?.annual_plan);
-  const annualRealization = toNumericAmount(row?.annual_realization);
-  const annualBalance = toNumericAmount(row?.annual_balance);
-  const computedPlan = sumMonthlyValues(row, "plan");
-  const computedRealization = sumMonthlyValues(row, "realization");
-  const computedBalance = sumMonthlyValues(row, "balance");
+  const planAmount = toNumericAmount(row?.plan);
+  const realizationAmount = toNumericAmount(row?.realization);
+  const deviationAmount = toNumericAmount(row?.balance);
 
   return {
     ...row,
-    annual_plan: annualPlan,
-    annual_realization: annualRealization,
-    annual_balance: annualBalance,
-    computed_annual_plan: computedPlan,
-    computed_annual_realization: computedRealization,
-    computed_annual_balance: computedBalance,
-    has_plan_mismatch: annualPlan !== computedPlan,
-    has_realization_mismatch: annualRealization !== computedRealization,
-    has_balance_mismatch: annualBalance !== computedBalance,
+    plan_amount: planAmount,
+    realization_amount: realizationAmount,
+    deviation_amount: deviationAmount,
+    is_overspend: realizationAmount > planAmount,
+    has_warning: planAmount === 0 ? realizationAmount > 0 : realizationAmount > planAmount,
   };
 }
 
-function aggregateBalanceRows(rows = []) {
+function aggregateMonthlyRows(rows = []) {
   const aggregateBySubActivityId = new Map();
 
   rows.forEach((row) => {
@@ -123,15 +92,15 @@ function aggregateBalanceRows(rows = []) {
     }
 
     const currentAggregate = aggregateBySubActivityId.get(subActivityId) || {
-      annual_plan: 0,
-      annual_realization: 0,
-      annual_balance: 0,
+      plan_amount: 0,
+      realization_amount: 0,
+      deviation_amount: 0,
       detail_count: 0,
     };
 
-    currentAggregate.annual_plan += toNumericAmount(row.annual_plan);
-    currentAggregate.annual_realization += toNumericAmount(row.annual_realization);
-    currentAggregate.annual_balance += toNumericAmount(row.annual_balance);
+    currentAggregate.plan_amount += toNumericAmount(row.plan);
+    currentAggregate.realization_amount += toNumericAmount(row.realization);
+    currentAggregate.deviation_amount += toNumericAmount(row.balance);
     currentAggregate.detail_count += 1;
 
     aggregateBySubActivityId.set(subActivityId, currentAggregate);
@@ -140,10 +109,28 @@ function aggregateBalanceRows(rows = []) {
   return aggregateBySubActivityId;
 }
 
+export async function getBudgetRealizationStatuses() {
+  return (
+    await unwrapQueryResult(
+      supabase
+        .from("fin_budget_realization_statuses")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("code", { ascending: true })
+    )
+  ) || [];
+}
+
+export async function getDefaultBudgetRealizationStatus() {
+  const statuses = await getBudgetRealizationStatuses();
+  return statuses[0] || null;
+}
 
 export async function getRealizationSubActivitySummary(
   rakVersionId = null,
-  fiscalYearId = null
+  fiscalYearId = null,
+  periodMonth = null
 ) {
   const version = await resolveRealizationRakVersion(rakVersionId, fiscalYearId);
 
@@ -152,11 +139,15 @@ export async function getRealizationSubActivitySummary(
       rakVersion: null,
       rows: [],
       warnings: ["Tidak ada versi ACTIVE yang bisa dipakai sebagai default."],
-      requestKey: toRequestKey(null, "summary"),
+      requestKey: toRequestKey(null, `summary:${periodMonth || "all"}`),
     };
   }
 
-  const [subActivitySummaryRows, rawBalanceRows] = await Promise.all([
+  if (!periodMonth) {
+    throw new Error("periodMonth wajib diisi untuk membaca realisasi bulanan.");
+  }
+
+  const [subActivitySummaryRows, rawMonthlyRows] = await Promise.all([
     unwrapQueryResult(
       supabase
         .from("fin_v_rak_sub_activity_summary")
@@ -166,30 +157,31 @@ export async function getRealizationSubActivitySummary(
     ),
     unwrapQueryResult(
       supabase
-        .from("fin_v_budget_balance_summary")
+        .from("fin_v_budget_balance_unpivot")
         .select("*")
         .eq("rak_version_id", version.id)
+        .eq("period_month", periodMonth)
         .order("sub_activity_code", { ascending: true })
         .order("budget_account_code", { ascending: true })
     ),
   ]);
 
   const warnings = [];
-  const balanceRows = (rawBalanceRows || []).filter(isExpectedBalanceRow);
-  const filteredOutCount = (rawBalanceRows || []).length - balanceRows.length;
+  const balanceRows = (rawMonthlyRows || []).filter(isExpectedBalanceRow);
+  const filteredOutCount = (rawMonthlyRows || []).length - balanceRows.length;
 
   if (filteredOutCount > 0) {
     warnings.push(
-      `Sejumlah ${filteredOutCount} row balance diabaikan karena tidak memenuhi asumsi minimum Belanja Level 5.`
+      `Sejumlah ${filteredOutCount} row realisasi bulanan diabaikan karena tidak memenuhi asumsi minimum Belanja Level 5.`
     );
   }
 
-  const aggregatesBySubActivityId = aggregateBalanceRows(balanceRows);
+  const aggregatesBySubActivityId = aggregateMonthlyRows(balanceRows);
   const summaryRows = (subActivitySummaryRows || []).map((summaryRow) =>
-    mapRealizationSummaryRow(
-      summaryRow,
-      aggregatesBySubActivityId.get(summaryRow.sub_activity_id)
-    )
+    mapRealizationSummaryRow({
+      ...summaryRow,
+      ...(aggregatesBySubActivityId.get(summaryRow.sub_activity_id) || {}),
+    })
   );
 
   const unknownAggregateCount = [...aggregatesBySubActivityId.keys()].filter(
@@ -201,17 +193,7 @@ export async function getRealizationSubActivitySummary(
 
   if (unknownAggregateCount > 0) {
     warnings.push(
-      `${unknownAggregateCount} agregat realisasi tidak bisa dipetakan ke Sub Kegiatan pada versi RAK ini.`
-    );
-  }
-
-  const planMismatchCount = summaryRows.filter(
-    (row) => row.annual_plan !== row.detail_annual_plan
-  ).length;
-
-  if (planMismatchCount > 0) {
-    warnings.push(
-      `${planMismatchCount} Sub Kegiatan memiliki total plan detail yang tidak sama dengan summary RAK.`
+      `${unknownAggregateCount} agregat realisasi bulanan tidak bisa dipetakan ke Sub Kegiatan pada versi RAK ini.`
     );
   }
 
@@ -219,13 +201,14 @@ export async function getRealizationSubActivitySummary(
     rakVersion: version,
     rows: summaryRows,
     warnings,
-    requestKey: toRequestKey(version.id, "summary"),
+    requestKey: toRequestKey(version.id, `summary:${periodMonth}`),
   };
 }
 
 export async function getRealizationBudgetItemDetail(
   rakVersionId,
-  rakSubActivityId
+  rakSubActivityId,
+  periodMonth
 ) {
   if (!rakVersionId) {
     throw new Error("rakVersionId wajib diisi untuk membaca detail Realisasi.");
@@ -233,6 +216,10 @@ export async function getRealizationBudgetItemDetail(
 
   if (!rakSubActivityId) {
     throw new Error("rakSubActivityId wajib diisi untuk membaca detail Realisasi.");
+  }
+
+  if (!periodMonth) {
+    throw new Error("periodMonth wajib diisi untuk membaca detail Realisasi.");
   }
 
   const version = await resolveRealizationRakVersion(rakVersionId);
@@ -253,10 +240,11 @@ export async function getRealizationBudgetItemDetail(
   const rawBalanceRows =
     await unwrapQueryResult(
       supabase
-        .from("fin_v_budget_balance_summary")
+        .from("fin_v_budget_balance_unpivot")
         .select("*")
         .eq("rak_version_id", version.id)
         .eq("sub_activity_id", subActivity.sub_activity_id)
+        .eq("period_month", periodMonth)
         .order("budget_account_code", { ascending: true })
     );
 
@@ -267,29 +255,89 @@ export async function getRealizationBudgetItemDetail(
 
   if (filteredOutCount > 0) {
     warnings.push(
-      `Sejumlah ${filteredOutCount} row detail realisasi diabaikan karena tidak memenuhi asumsi minimum Belanja Level 5.`
+      `Sejumlah ${filteredOutCount} row detail realisasi bulanan diabaikan karena tidak memenuhi asumsi minimum Belanja Level 5.`
     );
   }
 
   const rows = filteredRows.map(mapRealizationDetailRow);
-  const mismatchCount = rows.filter(
-    (row) =>
-      row.has_plan_mismatch ||
-      row.has_realization_mismatch ||
-      row.has_balance_mismatch
-  ).length;
-
-  if (mismatchCount > 0) {
-    warnings.push(
-      `${mismatchCount} item memiliki total bulanan yang tidak sama dengan total tahunannya.`
-    );
-  }
 
   return {
     rakVersion: version,
     subActivity,
     rows,
     warnings,
-    requestKey: toRequestKey(version.id, rakSubActivityId),
+    requestKey: toRequestKey(version.id, `${rakSubActivityId}:${periodMonth}`),
+  };
+}
+
+export async function saveAggregatedMonthlyRealization({
+  fiscalYearId,
+  subActivityId,
+  budgetAccountId,
+  rakVersionIdSnapshot,
+  periodMonth,
+  amount,
+}) {
+  return await saveMonthlyBudgetRealization({
+    p_fiscal_year_id: fiscalYearId,
+    p_sub_activity_id: subActivityId,
+    p_budget_account_id: budgetAccountId,
+    p_rak_version_id: rakVersionIdSnapshot,
+    p_period_month: periodMonth,
+    p_amount: amount,
+  });
+}
+
+export async function saveMonthlyBudgetRealization({
+  p_fiscal_year_id,
+  p_sub_activity_id,
+  p_budget_account_id,
+  p_rak_version_id,
+  p_period_month,
+  p_amount,
+}) {
+  const normalizedAmount = toNumericAmount(p_amount);
+
+  if (normalizedAmount < 0) {
+    throw new Error("Nilai realisasi tidak boleh negatif.");
+  }
+
+  if (!p_fiscal_year_id) {
+    throw new Error("Fiscal year wajib diisi.");
+  }
+
+  if (!p_sub_activity_id) {
+    throw new Error("Sub Kegiatan wajib diisi.");
+  }
+
+  if (!p_budget_account_id) {
+    throw new Error("Akun belanja wajib diisi.");
+  }
+
+  if (!p_rak_version_id) {
+    throw new Error("Snapshot versi RAK wajib diisi.");
+  }
+
+  if (!p_period_month || Number(p_period_month) < 1 || Number(p_period_month) > 12) {
+    throw new Error("Bulan realisasi tidak valid.");
+  }
+
+  const { error } = await supabase.rpc("fin_save_monthly_budget_realization", {
+    p_fiscal_year_id,
+    p_sub_activity_id,
+    p_budget_account_id,
+    p_rak_version_id,
+    p_period_month,
+    p_amount: normalizedAmount,
+  });
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  return {
+    action: normalizedAmount > 0 ? "replace" : "delete",
+    amount: normalizedAmount,
   };
 }

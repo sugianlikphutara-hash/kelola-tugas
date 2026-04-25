@@ -573,6 +573,337 @@ export async function getTaskActionPlanLinks() {
   return data || [];
 }
 
+export async function getBudgetAccounts() {
+  const { data, error } = await supabase
+    .from("fin_budget_accounts")
+    .select(
+      "id, code, name, parent_id, budget_level_id, is_leaf, is_active, fin_budget_levels(level_number)"
+    )
+    .order("code", { ascending: true });
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  return (data || []).map((item) => ({
+    ...item,
+    level_number: Array.isArray(item.fin_budget_levels)
+      ? item.fin_budget_levels[0]?.level_number ?? null
+      : item.fin_budget_levels?.level_number ?? null,
+  }));
+}
+
+export async function getBudgetLevels() {
+  const { data, error } = await supabase
+    .from("fin_budget_levels")
+    .select("id, code, level_number, name")
+    .order("level_number", { ascending: true });
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+export async function createBudgetAccount(payload) {
+  const { data, error } = await supabase
+    .from("fin_budget_accounts")
+    .insert([
+      {
+        code: payload.code,
+        name: payload.name,
+        parent_id: payload.parent_id || null,
+        budget_level_id: payload.budget_level_id,
+        is_leaf: payload.is_leaf,
+        is_active: payload.is_active,
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateBudgetAccountMetadata(budgetAccountId, payload) {
+  const { data, error } = await supabase
+    .from("fin_budget_accounts")
+    .update({
+      name: payload.name,
+      is_active: payload.is_active,
+    })
+    .eq("id", budgetAccountId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getBudgetAccountDeleteGuards(budgetAccountId) {
+  const [childResult, rakUsageResult, realizationUsageResult] = await Promise.all([
+    supabase
+      .from("fin_budget_accounts")
+      .select("id", { count: "exact", head: true })
+      .eq("parent_id", budgetAccountId),
+    supabase
+      .from("fin_rak_budget_items")
+      .select("id", { count: "exact", head: true })
+      .eq("budget_account_id", budgetAccountId),
+    supabase
+      .from("fin_budget_realizations")
+      .select("id", { count: "exact", head: true })
+      .eq("budget_account_id", budgetAccountId),
+  ]);
+
+  const firstError =
+    childResult.error || rakUsageResult.error || realizationUsageResult.error;
+
+  if (firstError) {
+    console.error(firstError);
+    throw firstError;
+  }
+
+  return {
+    hasChildren: Number(childResult.count || 0) > 0,
+    isUsedInRak: Number(rakUsageResult.count || 0) > 0,
+    isUsedInRealization: Number(realizationUsageResult.count || 0) > 0,
+  };
+}
+
+export async function deleteBudgetAccount(budgetAccountId) {
+  const { error } = await supabase
+    .from("fin_budget_accounts")
+    .delete()
+    .eq("id", budgetAccountId);
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+}
+
+export async function getBudgetItemStatuses() {
+  const { data, error } = await supabase
+    .from("fin_budget_item_statuses")
+    .select("id, code, name, color, is_active")
+    .order("code", { ascending: true });
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+export async function createBudgetItemStatus(payload) {
+  const { data, error } = await supabase
+    .from("fin_budget_item_statuses")
+    .insert([
+      {
+        code: payload.code,
+        name: payload.name,
+        color: payload.color,
+        is_active: payload.is_active,
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateBudgetItemStatus(statusId, payload) {
+  const { data, error } = await supabase
+    .from("fin_budget_item_statuses")
+    .update({
+      code: payload.code,
+      name: payload.name,
+      color: payload.color,
+      is_active: payload.is_active,
+    })
+    .eq("id", statusId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getBudgetItemStatusDeleteGuard() {
+  return {
+    isUsed: false,
+  };
+}
+
+export async function deleteBudgetItemStatus(statusId) {
+  const { error } = await supabase
+    .from("fin_budget_item_statuses")
+    .delete()
+    .eq("id", statusId);
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+}
+
+export async function getBudgetYears() {
+  const { data, error } = await supabase
+    .from("fiscal_years")
+    .select("id, year, start_date, end_date, is_active, created_at, updated_at")
+    .order("year", { ascending: false });
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  return data || [];
+}
+
+async function deactivateOtherBudgetYears(excludedId = null) {
+  let query = supabase
+    .from("fiscal_years")
+    .update({ is_active: false })
+    .not("id", "is", null);
+
+  if (excludedId) {
+    query = query.neq("id", excludedId);
+  }
+
+  const { error } = await query;
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+}
+
+export async function createBudgetYear(payload) {
+  if (payload.is_active) {
+    await deactivateOtherBudgetYears();
+  }
+
+  const { data, error } = await supabase
+    .from("fiscal_years")
+    .insert([
+      {
+        year: payload.year,
+        start_date: payload.start_date,
+        end_date: payload.end_date,
+        is_active: payload.is_active,
+      },
+    ])
+    .select()
+    .single();
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function updateBudgetYear(budgetYearId, payload) {
+  if (payload.is_active) {
+    await deactivateOtherBudgetYears(budgetYearId);
+  }
+
+  const { data, error } = await supabase
+    .from("fiscal_years")
+    .update({
+      year: payload.year,
+      start_date: payload.start_date,
+      end_date: payload.end_date,
+      is_active: payload.is_active,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", budgetYearId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function getBudgetYearUsageGuard(budgetYear) {
+  const budgetYearId = String(budgetYear?.id || "").trim();
+
+  if (!budgetYearId) {
+    return {
+      isUsed: false,
+      isUsedInRak: false,
+      isUsedInRealization: false,
+    };
+  }
+
+  const [rakUsageResult, realizationUsageResult] = await Promise.all([
+    supabase
+      .from("fin_rak_versions")
+      .select("id", { count: "exact", head: true })
+      .eq("fiscal_year_id", budgetYearId),
+    supabase
+      .from("fin_budget_realizations")
+      .select("id", { count: "exact", head: true })
+      .eq("fiscal_year_id", budgetYearId),
+  ]);
+
+  const firstError = rakUsageResult.error || realizationUsageResult.error;
+
+  if (firstError) {
+    console.error(firstError);
+    throw firstError;
+  }
+
+  const isUsedInRak = Number(rakUsageResult.count || 0) > 0;
+  const isUsedInRealization = Number(realizationUsageResult.count || 0) > 0;
+
+  return {
+    isUsed: isUsedInRak || isUsedInRealization,
+    isUsedInRak,
+    isUsedInRealization,
+  };
+}
+
+export async function deleteBudgetYear(budgetYearId) {
+  const { error } = await supabase
+    .from("fiscal_years")
+    .delete()
+    .eq("id", budgetYearId);
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+}
+
 export async function createActionPlan(payload) {
   const { data, error } = await supabase
     .from("action_plans")

@@ -1,6 +1,9 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import {
+  getChipStyle,
   getTableBodyCellStyle,
+  getTableCellLabelTypography,
+  getTableCellSubtitleTypography,
   getTableFrameStyle,
   getTableHeaderCellStyle,
 } from "../../lib/controlStyles";
@@ -22,21 +25,63 @@ function getAmountColor(value) {
   return "var(--text-h)";
 }
 
+function getAmountCellStyle(tableBodyCellStyle, value) {
+  return {
+    ...tableBodyCellStyle,
+    textAlign: "right",
+    color: getAmountColor(value),
+  };
+}
+
+function getRemarkText(row) {
+  const planAmount = Number(row.plan_amount || 0);
+  const realizationAmount = Number(row.realization_amount || 0);
+
+  if (planAmount === 0 && realizationAmount > 0) {
+    return "Realisasi tanpa plan";
+  }
+
+  if (realizationAmount === 0 && planAmount > 0) {
+    return "Belum terealisasi";
+  }
+
+  if (realizationAmount > planAmount) {
+    return "Overspending";
+  }
+
+  return "-";
+}
+
 export default function RealizationSubActivityTable({
+  prefersDarkMode,
+  monthLabel,
   rows,
   expandedRowKey,
   detailStateByKey,
   onToggleExpand,
+  draftValuesByDetailKey,
+  rowMutationStateByDetailKey,
+  onDraftChange,
+  onSaveRow,
 }) {
   const tableBodyCellStyle = getTableBodyCellStyle();
+  const [hoveredRowKey, setHoveredRowKey] = useState("");
 
   return (
     <div style={getTableFrameStyle()}>
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 920 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1080 }}>
           <thead>
             <tr>
-              <th style={{ ...getTableHeaderCellStyle({ label: "Detail" }), width: 80 }}>
+              <th
+                style={{
+                  ...getTableHeaderCellStyle({
+                    label: "Detail",
+                    padding: "14px 10px",
+                  }),
+                  width: 40,
+                }}
+              >
                 Detail
               </th>
               <th style={getTableHeaderCellStyle({ label: "Sub Kegiatan" })}>
@@ -44,27 +89,37 @@ export default function RealizationSubActivityTable({
               </th>
               <th
                 style={{
-                  ...getTableHeaderCellStyle({ label: "Plan" }),
+                  ...getTableHeaderCellStyle({ label: `Plan ${monthLabel}` }),
                   width: 180,
                 }}
               >
-                Plan
+                Plan {monthLabel}
               </th>
               <th
                 style={{
-                  ...getTableHeaderCellStyle({ label: "Realisasi" }),
+                  ...getTableHeaderCellStyle({ label: `Realisasi ${monthLabel}` }),
                   width: 180,
                 }}
               >
-                Realisasi
+                Realisasi {monthLabel}
               </th>
               <th
                 style={{
-                  ...getTableHeaderCellStyle({ label: "Saldo" }),
+                  ...getTableHeaderCellStyle({
+                    label: "Deviation (Plan - Realisasi)",
+                  }),
+                  width: 220,
+                }}
+              >
+                Deviation (Plan - Realisasi)
+              </th>
+              <th
+                style={{
+                  ...getTableHeaderCellStyle({ label: "Keterangan" }),
                   width: 180,
                 }}
               >
-                Saldo
+                Keterangan
               </th>
             </tr>
           </thead>
@@ -78,76 +133,142 @@ export default function RealizationSubActivityTable({
                 errorMessage: "",
                 warningMessages: [],
               };
+              const remarkText = getRemarkText(row);
+              const rowBackground =
+                hoveredRowKey === detailKey ? "var(--surface-1)" : "transparent";
+              const expandedParentCellStyle = isExpanded
+                ? { borderBottom: "1px solid var(--border-strong)" }
+                : null;
 
               return (
                 <Fragment key={detailKey}>
-                  <tr>
+                  <tr
+                    onMouseEnter={() => setHoveredRowKey(detailKey)}
+                    onMouseLeave={() => setHoveredRowKey("")}
+                    style={{ background: rowBackground, transition: "background 140ms ease" }}
+                  >
                     <td
                       style={{
                         ...tableBodyCellStyle,
                         textAlign: "center",
-                        width: 80,
+                        width: 40,
+                        ...expandedParentCellStyle,
                       }}
                     >
                       <button
                         type="button"
                         onClick={() => onToggleExpand(row)}
+                        title="Lihat detail akun"
+                        aria-label="Lihat detail akun"
                         style={{
                           minWidth: 36,
                           minHeight: 36,
+                          fontSize: 18,
+                          lineHeight: 1,
                           borderRadius: 10,
                           border: "1px solid var(--control-border)",
                           background: "var(--surface-1)",
                           color: "var(--text-h)",
                           cursor: "pointer",
-                          fontWeight: 700,
                         }}
                       >
                         {isExpanded ? "-" : "+"}
                       </button>
                     </td>
-                    <td style={tableBodyCellStyle}>
-                      <div style={{ fontWeight: 600, color: "var(--text-h)" }}>
+                    <td style={{ ...tableBodyCellStyle, ...expandedParentCellStyle }}>
+                      <div style={getTableCellLabelTypography()}>
                         {row.sub_activity_name}
                       </div>
-                      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                      <div style={getTableCellSubtitleTypography()}>
                         {row.sub_activity_code}
                       </div>
-                    </td>
-                    <td style={{ ...tableBodyCellStyle, textAlign: "right" }}>
-                      {formatCurrency(row.annual_plan)}
-                    </td>
-                    <td style={{ ...tableBodyCellStyle, textAlign: "right" }}>
-                      {formatCurrency(row.annual_realization)}
                     </td>
                     <td
                       style={{
                         ...tableBodyCellStyle,
                         textAlign: "right",
-                        color: getAmountColor(row.annual_balance),
-                        fontWeight: 700,
+                        ...expandedParentCellStyle,
                       }}
                     >
-                      {formatCurrency(row.annual_balance)}
+                      {formatCurrency(row.plan_amount)}
+                    </td>
+                    <td
+                      style={{
+                        ...tableBodyCellStyle,
+                        textAlign: "right",
+                        ...expandedParentCellStyle,
+                      }}
+                    >
+                      {formatCurrency(row.realization_amount)}
+                    </td>
+                    <td
+                      style={{
+                        ...getAmountCellStyle(tableBodyCellStyle, row.deviation_amount),
+                        ...expandedParentCellStyle,
+                      }}
+                    >
+                      {formatCurrency(row.deviation_amount)}
+                    </td>
+                    <td
+                      style={{
+                        ...tableBodyCellStyle,
+                        textAlign: "left",
+                        ...expandedParentCellStyle,
+                      }}
+                    >
+                      {remarkText === "-" ? (
+                        <span style={{ color: "var(--text-muted)" }}>-</span>
+                      ) : (
+                        <span
+                          style={getChipStyle(prefersDarkMode, {
+                            tone: "muted",
+                            size: "sm",
+                          })}
+                        >
+                          {remarkText}
+                        </span>
+                      )}
                     </td>
                   </tr>
 
                   {isExpanded ? (
                     <tr>
                       <td
-                        colSpan={5}
+                        colSpan={6}
                         style={{
                           ...tableBodyCellStyle,
-                          padding: 18,
+                          padding: "0 18px 18px 66px",
                           background: "var(--surface-1)",
                         }}
                       >
-                        <RealizationBudgetItemDetailTable
-                          rows={detailState.rows}
-                          isLoading={detailState.isLoading}
-                          errorMessage={detailState.errorMessage}
-                          warningMessages={detailState.warningMessages}
-                        />
+                        <div
+                          style={{
+                            border: "1px solid var(--border-strong)",
+                            borderTop: "none",
+                            borderRadius: "0 0 10px 10px",
+                            boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <RealizationBudgetItemDetailTable
+                            prefersDarkMode={prefersDarkMode}
+                            monthLabel={monthLabel}
+                            rows={detailState.rows}
+                            isLoading={detailState.isLoading}
+                            errorMessage={detailState.errorMessage}
+                            warningMessages={detailState.warningMessages}
+                            draftValues={draftValuesByDetailKey?.[detailKey] || {}}
+                            rowMutationState={
+                              rowMutationStateByDetailKey?.[detailKey] || {}
+                            }
+                            onDraftChange={(detailRow, value) =>
+                              onDraftChange?.(detailKey, detailRow, value)
+                            }
+                            onSaveRow={(detailRow) =>
+                              onSaveRow?.(detailKey, row, detailRow)
+                            }
+                          />
+                        </div>
                       </td>
                     </tr>
                   ) : null}
@@ -158,7 +279,7 @@ export default function RealizationSubActivityTable({
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   style={{
                     ...tableBodyCellStyle,
                     padding: 24,

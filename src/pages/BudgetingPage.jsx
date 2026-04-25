@@ -1,8 +1,9 @@
 import { useState } from "react";
 import BudgetDashboardPage from "./BudgetDashboardPage";
 import BudgetPlanPage from "./BudgetPlanPage";
-import BudgetProgressPage from "./BudgetProgressPage";
 import BudgetRealizationPage from "./BudgetRealizationPage";
+import BudgetRakListPage from "./BudgetRakListPage";
+import BudgetTrackingPage from "./BudgetTrackingPage";
 import BudgetWarningPage from "./BudgetWarningPage";
 import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode";
 import {
@@ -14,6 +15,16 @@ import {
 export default function BudgetingPage() {
   const prefersDarkMode = usePrefersDarkMode();
   const [activeSection, setActiveSection] = useState("dashboard");
+  const [selectedRakVersionIdForDetail, setSelectedRakVersionIdForDetail] = useState("");
+
+  function handleOpenVersionDetail(version) {
+    if (!version?.id) {
+      return;
+    }
+
+    setSelectedRakVersionIdForDetail(version.id);
+    setActiveSection("plan");
+  }
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
@@ -43,6 +54,25 @@ export default function BudgetingPage() {
           }
         >
           Dashboard
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveSection("rak-list")}
+          style={
+            activeSection === "rak-list"
+              ? getPrimaryButtonStyle(prefersDarkMode, {
+                  isEnabled: true,
+                  height: 38,
+                  size: "sm",
+                })
+              : getOutlinedButtonStyle(prefersDarkMode, {
+                  isEnabled: true,
+                  height: 38,
+                  size: "sm",
+                })
+          }
+        >
+          RAK
         </button>
         <button
           type="button"
@@ -99,7 +129,7 @@ export default function BudgetingPage() {
                 })
           }
         >
-          Progress
+          Tracking
         </button>
         <button
           type="button"
@@ -123,8 +153,13 @@ export default function BudgetingPage() {
       </section>
 
       {activeSection === "dashboard" ? <BudgetDashboardPage /> : null}
-      {activeSection === "plan" ? <BudgetPlanPage /> : null}
-      {activeSection === "progress" ? <BudgetProgressPage /> : null}
+      {activeSection === "rak-list" ? (
+        <BudgetRakListPage onOpenVersionDetail={handleOpenVersionDetail} />
+      ) : null}
+      {activeSection === "plan" ? (
+        <BudgetPlanPage forcedRakVersionId={selectedRakVersionIdForDetail} />
+      ) : null}
+      {activeSection === "progress" ? <BudgetTrackingPage /> : null}
       {activeSection === "realization" ? <BudgetRealizationPage /> : null}
       {activeSection === "warning" ? <BudgetWarningPage /> : null}
     </div>

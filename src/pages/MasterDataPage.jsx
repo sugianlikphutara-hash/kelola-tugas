@@ -9,6 +9,15 @@ import {
   createStatus,
   createSubActivity,
   createWorkPlan,
+  createBudgetAccount,
+  createBudgetItemStatus,
+  createBudgetYear,
+  deleteBudgetAccount,
+  deleteBudgetItemStatus,
+  deleteBudgetYear,
+  updateBudgetAccountMetadata,
+  updateBudgetItemStatus,
+  updateBudgetYear,
   deleteActivity,
   deleteActionPlan,
   deleteEmployee,
@@ -17,6 +26,13 @@ import {
   deleteStatus,
   deleteSubActivity,
   deleteWorkPlan,
+  getBudgetAccountDeleteGuards,
+  getBudgetAccounts,
+  getBudgetItemStatusDeleteGuard,
+  getBudgetItemStatuses,
+  getBudgetLevels,
+  getBudgetYearUsageGuard,
+  getBudgetYears,
   getActivities,
   getActionPlans,
   getEmployees,
@@ -66,6 +82,13 @@ const menus = [
   { key: "sub-kegiatan", label: "Sub Kegiatan" },
   { key: "rhk", label: "RHK" },
   { key: "rencana-aksi", label: "Rencana Aksi" },
+  { key: "anggaran", label: "Anggaran" },
+];
+
+const budgetTabs = [
+  { key: "akun-belanja", label: "Akun Belanja", placeholder: "Halaman Akun Belanja" },
+  { key: "status-item", label: "Status Item", placeholder: "Halaman Status Item" },
+  { key: "tahun-anggaran", label: "Tahun Anggaran", placeholder: "Halaman Tahun Anggaran" },
 ];
 
 function createDefaultForm() {
@@ -93,6 +116,11 @@ function createDefaultForm() {
     output_target: "",
     output_unit: "",
     level: "",
+    year: "",
+    parent_id: "",
+    budget_level_id: "",
+    color: "#9CA3AF",
+    is_leaf: false,
     is_active: true,
   };
 }
@@ -158,6 +186,134 @@ function TableActionButtons({ onEdit, onDelete, prefersDarkMode }) {
       </button>
     </div>
   );
+}
+
+function isDuplicateBudgetAccountCodeError(error) {
+  const errorCode = String(error?.code || "").trim();
+  const errorMessage = String(error?.message || "").toLowerCase();
+
+  return (
+    errorCode === "23505" ||
+    errorMessage.includes("duplicate") ||
+    errorMessage.includes("unique")
+  );
+}
+
+function resolveBudgetItemStatusColor(code, color = "") {
+  const normalizedCode = String(code || "").trim().toUpperCase();
+  const normalizedColor = String(color || "").trim();
+
+  if (normalizedColor) {
+    return normalizedColor;
+  }
+
+  if (normalizedCode === "APPROVED") {
+    return "#16A34A";
+  }
+
+  if (normalizedCode === "REJECTED") {
+    return "#DC2626";
+  }
+
+  return "#9CA3AF";
+}
+
+function getBudgetItemStatusChipTone(code) {
+  const normalizedCode = String(code || "").trim().toUpperCase();
+
+  if (normalizedCode === "APPROVED") {
+    return "success";
+  }
+
+  if (normalizedCode === "REJECTED") {
+    return "danger";
+  }
+
+  return "warning";
+}
+
+function isDuplicateBudgetItemStatusCodeError(error) {
+  const errorCode = String(error?.code || "").trim();
+  const errorMessage = String(error?.message || "").toLowerCase();
+
+  return (
+    errorCode === "23505" ||
+    errorMessage.includes("duplicate") ||
+    errorMessage.includes("unique")
+  );
+}
+
+function isDuplicateBudgetYearError(error) {
+  const errorCode = String(error?.code || "").trim();
+  const errorMessage = String(error?.message || "").toLowerCase();
+
+  return (
+    errorCode === "23505" ||
+    errorMessage.includes("duplicate") ||
+    errorMessage.includes("unique")
+  );
+}
+
+function parseBudgetAccountCode(rawCode) {
+  const normalizedCode = String(rawCode || "").trim();
+
+  if (!normalizedCode) {
+    return {
+      normalizedCode: "",
+      levelNumber: null,
+      parentCode: null,
+      isLeaf: false,
+      errorMessage: "",
+    };
+  }
+
+  const levelPatterns = [
+    { levelNumber: 1, regex: /^\d+\.\d+$/ },
+    { levelNumber: 2, regex: /^\d+\.\d+\.\d{2}$/ },
+    { levelNumber: 3, regex: /^\d+\.\d+\.\d{2}\.\d{2}$/ },
+    { levelNumber: 4, regex: /^\d+\.\d+\.\d{2}\.\d{2}\.\d{3}$/ },
+    { levelNumber: 5, regex: /^\d+\.\d+\.\d{2}\.\d{2}\.\d{3}\.\d{5}$/ },
+  ];
+
+  const matchedPattern = levelPatterns.find((item) => item.regex.test(normalizedCode));
+
+  if (!matchedPattern) {
+    return {
+      normalizedCode,
+      levelNumber: null,
+      parentCode: null,
+      isLeaf: false,
+      errorMessage: "Format kode akun tidak valid",
+    };
+  }
+
+  if (
+    matchedPattern.levelNumber === 1 &&
+    normalizedCode !== "5.1" &&
+    normalizedCode !== "5.2"
+  ) {
+    return {
+      normalizedCode,
+      levelNumber: matchedPattern.levelNumber,
+      parentCode: null,
+      isLeaf: false,
+      errorMessage: "Akun Belanja ini Tidak diizinkan",
+    };
+  }
+
+  const codeSegments = normalizedCode.split(".");
+  const parentCode =
+    matchedPattern.levelNumber > 1
+      ? codeSegments.slice(0, -1).join(".")
+      : null;
+
+  return {
+    normalizedCode,
+    levelNumber: matchedPattern.levelNumber,
+    parentCode,
+    isLeaf: matchedPattern.levelNumber === 5,
+    errorMessage: "",
+  };
 }
 
 function MasterFormModal({
@@ -570,6 +726,544 @@ function MasterFormModal({
   );
 }
 
+function BudgetAccountFormModal({
+  isOpen,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  prefersDarkMode,
+  form,
+  onChange,
+  derivedBudgetAccountMeta,
+  isEditMode = false,
+}) {
+  if (!isOpen) return null;
+
+  const modalOverlayStyle = getOverlayStyle({
+    background: "rgba(15, 23, 42, 0.45)",
+    padding: 24,
+    zIndex: 120,
+  });
+
+  const modalPanelStyle = getModalStyle({
+    maxWidth: 640,
+    maxHeight: "calc(100vh - 48px)",
+    padding: 20,
+    borderRadius: 8,
+  });
+
+  const labelStyle = getFieldLabelStyle(prefersDarkMode);
+  const fieldStyle = {
+    ...getTextInputStyle(prefersDarkMode, { tone: "panel" }),
+    width: "100%",
+    borderRadius: 6,
+  };
+  const readOnlyFieldStyle = {
+    ...fieldStyle,
+    background: prefersDarkMode ? "var(--surface-1)" : "var(--surface-2)",
+    color: "var(--text-muted)",
+    cursor: "default",
+  };
+  const checkboxLabelStyle = {
+    ...labelStyle,
+    gridTemplateColumns: "auto 1fr",
+    alignItems: "center",
+    gap: 10,
+  };
+
+  return (
+    <div style={modalOverlayStyle}>
+      <div style={modalPanelStyle}>
+        <form onSubmit={onSubmit} style={{ display: "grid", gap: 16 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <h2 style={{ margin: 0, fontSize: 20, color: "var(--text-h)" }}>
+              {isEditMode ? "Edit Akun Belanja" : "Tambah Akun Belanja"}
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                ...getNeutralButtonStyle(prefersDarkMode, {
+                  isEnabled: true,
+                  size: "sm",
+                  height: 36,
+                }),
+                minWidth: 72,
+              }}
+            >
+              Tutup
+            </button>
+          </div>
+
+          {derivedBudgetAccountMeta.errorMessage ? (
+            <div
+              style={getAlertStyle(prefersDarkMode, {
+                tone: "error",
+                padding: "10px 12px",
+                borderRadius: 8,
+                fontSize: 13,
+              })}
+            >
+              {derivedBudgetAccountMeta.errorMessage}
+            </div>
+          ) : null}
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+            <label style={labelStyle}>
+              <span>Kode Akun</span>
+              <input
+                type="text"
+                name="code"
+                value={form.code}
+                onChange={onChange}
+                required
+                readOnly={isEditMode}
+                style={isEditMode ? readOnlyFieldStyle : fieldStyle}
+              />
+            </label>
+            <label style={labelStyle}>
+              <span>Nama Akun</span>
+              <input type="text" name="name" value={form.name} onChange={onChange} required style={fieldStyle} />
+            </label>
+          </div>
+
+          <label style={labelStyle}>
+            <span>Parent</span>
+            <input
+              type="text"
+              readOnly
+              value={derivedBudgetAccountMeta.parentLabel}
+              style={readOnlyFieldStyle}
+            />
+          </label>
+
+          <label style={labelStyle}>
+            <span>Level Akun</span>
+            <input
+              type="text"
+              readOnly
+              value={derivedBudgetAccountMeta.levelLabel}
+              style={readOnlyFieldStyle}
+            />
+          </label>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+            <label style={labelStyle}>
+              <span>Leaf</span>
+              <input
+                type="text"
+                readOnly
+                value={derivedBudgetAccountMeta.leafLabel}
+                style={readOnlyFieldStyle}
+              />
+            </label>
+            <label style={checkboxLabelStyle}>
+              <input type="checkbox" name="is_active" checked={Boolean(form.is_active)} onChange={onChange} />
+              <span>Status Aktif</span>
+            </label>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button
+              type="button"
+              className={`btn-specific-action ${!isSubmitting ? "btn-specific-action-enabled" : "btn-specific-action-disabled"}`}
+              onClick={onClose}
+              disabled={isSubmitting}
+              style={{ cursor: isSubmitting ? "wait" : "pointer" }}
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              style={{
+                ...getPrimaryButtonStyle(prefersDarkMode, { isEnabled: !isSubmitting, height: 40 }),
+                minWidth: 120,
+                cursor: isSubmitting ? "wait" : "pointer",
+              }}
+            >
+              {isSubmitting ? "Menyimpan..." : "Simpan"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function DeleteConfirmModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  isSubmitting,
+  prefersDarkMode,
+  title,
+  message,
+}) {
+  if (!isOpen) return null;
+
+  const modalOverlayStyle = getOverlayStyle({
+    background: "rgba(15, 23, 42, 0.45)",
+    padding: 24,
+    zIndex: 130,
+  });
+
+  const modalPanelStyle = getModalStyle({
+    maxWidth: 520,
+    maxHeight: "calc(100vh - 48px)",
+    padding: 20,
+    borderRadius: 8,
+  });
+
+  return (
+    <div style={modalOverlayStyle}>
+      <div style={modalPanelStyle}>
+        <div style={{ display: "grid", gap: 18 }}>
+          <div style={{ display: "grid", gap: 8 }}>
+            <h2 style={{ margin: 0, fontSize: 20, color: "var(--text-h)" }}>{title}</h2>
+            <div style={{ color: "var(--text-muted)", fontSize: 14, lineHeight: 1.5 }}>
+              {message}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button
+              type="button"
+              className={`btn-specific-action ${!isSubmitting ? "btn-specific-action-enabled" : "btn-specific-action-disabled"}`}
+              onClick={onClose}
+              disabled={isSubmitting}
+              style={{ cursor: isSubmitting ? "wait" : "pointer" }}
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={isSubmitting}
+              style={{
+                ...getInlineActionButtonStyle(prefersDarkMode, {
+                  isEnabled: !isSubmitting,
+                  tone: "danger",
+                  height: 40,
+                }),
+                minWidth: 120,
+                cursor: isSubmitting ? "wait" : "pointer",
+              }}
+            >
+              {isSubmitting ? "Menghapus..." : "Hapus"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BudgetItemStatusFormModal({
+  isOpen,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  prefersDarkMode,
+  form,
+  onChange,
+  isEditMode = false,
+}) {
+  if (!isOpen) return null;
+
+  const modalOverlayStyle = getOverlayStyle({
+    background: "rgba(15, 23, 42, 0.45)",
+    padding: 24,
+    zIndex: 120,
+  });
+
+  const modalPanelStyle = getModalStyle({
+    maxWidth: 560,
+    maxHeight: "calc(100vh - 48px)",
+    padding: 20,
+    borderRadius: 8,
+  });
+
+  const labelStyle = getFieldLabelStyle(prefersDarkMode);
+  const fieldStyle = {
+    ...getTextInputStyle(prefersDarkMode, { tone: "panel" }),
+    width: "100%",
+    borderRadius: 6,
+  };
+  const checkboxLabelStyle = {
+    ...labelStyle,
+    gridTemplateColumns: "auto 1fr",
+    alignItems: "center",
+    gap: 10,
+  };
+
+  return (
+    <div style={modalOverlayStyle}>
+      <div style={modalPanelStyle}>
+        <form onSubmit={onSubmit} style={{ display: "grid", gap: 16 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <h2 style={{ margin: 0, fontSize: 20, color: "var(--text-h)" }}>
+              {isEditMode ? "Edit Status Item" : "Tambah Status Item"}
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                ...getNeutralButtonStyle(prefersDarkMode, {
+                  isEnabled: true,
+                  size: "sm",
+                  height: 36,
+                }),
+                minWidth: 72,
+              }}
+            >
+              Tutup
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+            <label style={labelStyle}>
+              <span>Code</span>
+              <input type="text" name="code" value={form.code} onChange={onChange} required style={fieldStyle} />
+            </label>
+            <label style={labelStyle}>
+              <span>Name</span>
+              <input type="text" name="name" value={form.name} onChange={onChange} style={fieldStyle} />
+            </label>
+          </div>
+
+          <div style={{ display: "grid", gap: 8 }}>
+            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>Preview Status</span>
+            <div
+              style={{
+                ...getChipStyle(prefersDarkMode, {
+                  size: "xs",
+                  tone: getBudgetItemStatusChipTone(form.code),
+                }),
+                width: "fit-content",
+                fontWeight: 500,
+              }}
+            >
+              {String(form.code || "").trim().toUpperCase() || "PREVIEW"}
+            </div>
+          </div>
+
+          <label style={checkboxLabelStyle}>
+            <input type="checkbox" name="is_active" checked={Boolean(form.is_active)} onChange={onChange} />
+            <span>Status Aktif</span>
+          </label>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button
+              type="button"
+              className={`btn-specific-action ${!isSubmitting ? "btn-specific-action-enabled" : "btn-specific-action-disabled"}`}
+              onClick={onClose}
+              disabled={isSubmitting}
+              style={{ cursor: isSubmitting ? "wait" : "pointer" }}
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              style={{
+                ...getPrimaryButtonStyle(prefersDarkMode, { isEnabled: !isSubmitting, height: 40 }),
+                minWidth: 120,
+                cursor: isSubmitting ? "wait" : "pointer",
+              }}
+            >
+              {isSubmitting ? "Menyimpan..." : "Simpan"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function BudgetYearFormModal({
+  isOpen,
+  onClose,
+  onSubmit,
+  isSubmitting,
+  prefersDarkMode,
+  form,
+  onChange,
+  isEditMode = false,
+  isLocked = false,
+}) {
+  if (!isOpen) return null;
+
+  const modalOverlayStyle = getOverlayStyle({
+    background: "rgba(15, 23, 42, 0.45)",
+    padding: 24,
+    zIndex: 120,
+  });
+
+  const modalPanelStyle = getModalStyle({
+    maxWidth: 560,
+    maxHeight: "calc(100vh - 48px)",
+    padding: 20,
+    borderRadius: 8,
+  });
+
+  const labelStyle = getFieldLabelStyle(prefersDarkMode);
+  const fieldStyle = {
+    ...getTextInputStyle(prefersDarkMode, { tone: "panel" }),
+    width: "100%",
+    borderRadius: 6,
+  };
+  const dateFieldStyle = {
+    ...getDateInputStyle(prefersDarkMode, { tone: "panel" }),
+    width: "100%",
+    borderRadius: 6,
+  };
+  const readOnlyFieldStyle = {
+    ...fieldStyle,
+    background: "var(--surface-muted)",
+    color: "var(--text-muted)",
+    cursor: "not-allowed",
+  };
+  const checkboxLabelStyle = {
+    ...labelStyle,
+    gridTemplateColumns: "auto 1fr",
+    alignItems: "center",
+    gap: 10,
+  };
+
+  return (
+    <div style={modalOverlayStyle}>
+      <div style={modalPanelStyle}>
+        <form onSubmit={onSubmit} style={{ display: "grid", gap: 16 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <h2 style={{ margin: 0, fontSize: 20, color: "var(--text-h)" }}>
+              {isEditMode ? "Edit Tahun Anggaran" : "Tambah Tahun Anggaran"}
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                ...getNeutralButtonStyle(prefersDarkMode, {
+                  isEnabled: true,
+                  size: "sm",
+                  height: 36,
+                }),
+                minWidth: 72,
+              }}
+            >
+              Tutup
+            </button>
+          </div>
+
+          {isEditMode && isLocked ? (
+            <div
+              style={getAlertStyle(prefersDarkMode, {
+                tone: "warning",
+                padding: "10px 12px",
+                borderRadius: 8,
+                fontSize: 13,
+              })}
+            >
+              Tahun anggaran ini sudah digunakan, sehingga periode hanya bisa dilihat dan status aktif saja yang bisa diubah.
+            </div>
+          ) : null}
+
+          <label style={labelStyle}>
+            <span>Tahun</span>
+            <input
+              type="number"
+              name="year"
+              value={form.year}
+              onChange={onChange}
+              required
+              min="2000"
+              max="9999"
+              disabled={isLocked}
+              style={isLocked ? readOnlyFieldStyle : fieldStyle}
+            />
+          </label>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+            <label style={labelStyle}>
+              <span>Start Date</span>
+              <input
+                type="date"
+                name="start_date"
+                value={form.start_date}
+                onChange={onChange}
+                required
+                disabled={isLocked}
+                style={isLocked ? readOnlyFieldStyle : dateFieldStyle}
+              />
+            </label>
+            <label style={labelStyle}>
+              <span>End Date</span>
+              <input
+                type="date"
+                name="end_date"
+                value={form.end_date}
+                onChange={onChange}
+                required
+                disabled={isLocked}
+                style={isLocked ? readOnlyFieldStyle : dateFieldStyle}
+              />
+            </label>
+          </div>
+
+          <label style={checkboxLabelStyle}>
+            <input type="checkbox" name="is_active" checked={Boolean(form.is_active)} onChange={onChange} />
+            <span>Status Aktif</span>
+          </label>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <button
+              type="button"
+              className={`btn-specific-action ${!isSubmitting ? "btn-specific-action-enabled" : "btn-specific-action-disabled"}`}
+              onClick={onClose}
+              disabled={isSubmitting}
+              style={{ cursor: isSubmitting ? "wait" : "pointer" }}
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              style={{
+                ...getPrimaryButtonStyle(prefersDarkMode, { isEnabled: !isSubmitting, height: 40 }),
+                minWidth: 120,
+                cursor: isSubmitting ? "wait" : "pointer",
+              }}
+            >
+              {isSubmitting ? "Menyimpan..." : "Simpan"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function DataTable({ headers, rows, emptyText, columnStyles = [], minWidth = 860 }) {
   // Header default: all left-aligned.
   const tableHeaderAlignMode = 1;
@@ -630,6 +1324,7 @@ function DataTable({ headers, rows, emptyText, columnStyles = [], minWidth = 860
 export default function MasterDataPage() {
   const prefersDarkMode = usePrefersDarkMode();
   const [activeMenu, setActiveMenu] = useState("pelaksana");
+  const [activeBudgetTab, setActiveBudgetTab] = useState("akun-belanja");
   const [employees, setEmployees] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [priorities, setPriorities] = useState([]);
@@ -657,6 +1352,22 @@ export default function MasterDataPage() {
   const [actionPlanEmployeeFilter, setActionPlanEmployeeFilter] = useState("");
   const [actionPlanSort, setActionPlanSort] = useState("NEWEST");
   const [taskActionPlanLinks, setTaskActionPlanLinks] = useState([]);
+  const [budgetAccounts, setBudgetAccounts] = useState([]);
+  const [isBudgetAccountsLoading, setIsBudgetAccountsLoading] = useState(false);
+  const [budgetAccountsError, setBudgetAccountsError] = useState("");
+  const [hasLoadedBudgetAccounts, setHasLoadedBudgetAccounts] = useState(false);
+  const [budgetItemStatuses, setBudgetItemStatuses] = useState([]);
+  const [isBudgetItemStatusesLoading, setIsBudgetItemStatusesLoading] = useState(false);
+  const [budgetItemStatusesError, setBudgetItemStatusesError] = useState("");
+  const [hasLoadedBudgetItemStatuses, setHasLoadedBudgetItemStatuses] = useState(false);
+  const [budgetYears, setBudgetYears] = useState([]);
+  const [isBudgetYearsLoading, setIsBudgetYearsLoading] = useState(false);
+  const [budgetYearsError, setBudgetYearsError] = useState("");
+  const [hasLoadedBudgetYears, setHasLoadedBudgetYears] = useState(false);
+  const [budgetLevels, setBudgetLevels] = useState([]);
+  const [hasLoadedBudgetLevels, setHasLoadedBudgetLevels] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
 
   const tableFrameStyle = getTableFrameStyle();
   const labelStyle = getFieldLabelStyle(prefersDarkMode);
@@ -678,6 +1389,90 @@ export default function MasterDataPage() {
   const codeColumnStyle = useMemo(() => {
     // Keep "Code" truly one-line even when other columns grow.
     return { width: 140, maxWidth: 180, whiteSpace: "nowrap" };
+  }, []);
+
+  const budgetLevelByNumber = useMemo(
+    () => Object.fromEntries(budgetLevels.map((item) => [Number(item.level_number), item])),
+    [budgetLevels]
+  );
+
+  const loadBudgetAccounts = useCallback(async () => {
+    setIsBudgetAccountsLoading(true);
+    setBudgetAccountsError("");
+
+    try {
+      const rows = await getBudgetAccounts();
+      setBudgetAccounts(rows || []);
+      setHasLoadedBudgetAccounts(true);
+      return rows || [];
+    } catch (error) {
+      setBudgetAccountsError(
+        error?.message || "Gagal memuat data akun belanja."
+      );
+      setHasLoadedBudgetAccounts(true);
+      throw error;
+    } finally {
+      setIsBudgetAccountsLoading(false);
+    }
+  }, []);
+
+  const loadBudgetItemStatuses = useCallback(async () => {
+    setIsBudgetItemStatusesLoading(true);
+    setBudgetItemStatusesError("");
+
+    try {
+      const rows = await getBudgetItemStatuses();
+      setBudgetItemStatuses(rows || []);
+      setHasLoadedBudgetItemStatuses(true);
+      return rows || [];
+    } catch (error) {
+      setBudgetItemStatusesError(
+        error?.message || "Gagal memuat data status item."
+      );
+      setHasLoadedBudgetItemStatuses(true);
+      throw error;
+    } finally {
+      setIsBudgetItemStatusesLoading(false);
+    }
+  }, []);
+
+  const loadBudgetLevels = useCallback(async () => {
+    const rows = await getBudgetLevels();
+    setBudgetLevels(rows || []);
+    setHasLoadedBudgetLevels(true);
+    return rows || [];
+  }, []);
+
+  const loadBudgetYears = useCallback(async () => {
+    setIsBudgetYearsLoading(true);
+    setBudgetYearsError("");
+
+    try {
+      const rows = await getBudgetYears();
+      const rowsWithUsage = await Promise.all(
+        (rows || []).map(async (item) => {
+          const usage = await getBudgetYearUsageGuard(item);
+
+          return {
+            ...item,
+            has_relations: usage.isUsed,
+            usage_guard: usage,
+          };
+        })
+      );
+
+      setBudgetYears(rowsWithUsage);
+      setHasLoadedBudgetYears(true);
+      return rowsWithUsage;
+    } catch (error) {
+      setBudgetYearsError(
+        error?.message || "Gagal memuat data tahun anggaran."
+      );
+      setHasLoadedBudgetYears(true);
+      throw error;
+    } finally {
+      setIsBudgetYearsLoading(false);
+    }
   }, []);
 
   const loadMasterData = useCallback(async () => {
@@ -720,6 +1515,170 @@ export default function MasterDataPage() {
       isCancelled = true;
     };
   }, [loadMasterData]);
+
+  useEffect(() => {
+    if (activeMenu !== "anggaran" || activeBudgetTab !== "akun-belanja") {
+      return;
+    }
+
+    if (hasLoadedBudgetAccounts) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    Promise.resolve().then(async () => {
+      if (isCancelled) {
+        return;
+      }
+
+      try {
+        const rows = await loadBudgetAccounts();
+
+        if (isCancelled) {
+          return;
+        }
+
+        setBudgetAccounts(rows || []);
+      } catch {
+        if (isCancelled) {
+          return;
+        }
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    activeBudgetTab,
+    activeMenu,
+    hasLoadedBudgetAccounts,
+    loadBudgetAccounts,
+  ]);
+
+  useEffect(() => {
+    if (activeMenu !== "anggaran" || activeBudgetTab !== "status-item") {
+      return;
+    }
+
+    if (hasLoadedBudgetItemStatuses) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    Promise.resolve().then(async () => {
+      if (isCancelled) {
+        return;
+      }
+
+      try {
+        const rows = await loadBudgetItemStatuses();
+
+        if (isCancelled) {
+          return;
+        }
+
+        setBudgetItemStatuses(rows || []);
+      } catch {
+        if (isCancelled) {
+          return;
+        }
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    activeBudgetTab,
+    activeMenu,
+    hasLoadedBudgetItemStatuses,
+    loadBudgetItemStatuses,
+  ]);
+
+  useEffect(() => {
+    if (activeMenu !== "anggaran" || activeBudgetTab !== "tahun-anggaran") {
+      return;
+    }
+
+    if (hasLoadedBudgetYears) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    Promise.resolve().then(async () => {
+      if (isCancelled) {
+        return;
+      }
+
+      try {
+        const rows = await loadBudgetYears();
+
+        if (isCancelled) {
+          return;
+        }
+
+        setBudgetYears(rows || []);
+      } catch {
+        if (isCancelled) {
+          return;
+        }
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    activeBudgetTab,
+    activeMenu,
+    hasLoadedBudgetYears,
+    loadBudgetYears,
+  ]);
+
+  useEffect(() => {
+    if (activeMenu !== "anggaran" || activeBudgetTab !== "akun-belanja") {
+      return;
+    }
+
+    if (hasLoadedBudgetLevels) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    Promise.resolve().then(async () => {
+      if (isCancelled) {
+        return;
+      }
+
+      try {
+        const rows = await loadBudgetLevels();
+
+        if (isCancelled) {
+          return;
+        }
+
+        setBudgetLevels(rows || []);
+      } catch {
+        if (isCancelled) {
+          return;
+        }
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    activeBudgetTab,
+    activeMenu,
+    hasLoadedBudgetLevels,
+    loadBudgetLevels,
+  ]);
 
   const statusMap = useMemo(
     () => Object.fromEntries(statuses.map((item) => [String(item.id), item.name])),
@@ -1157,6 +2116,11 @@ export default function MasterDataPage() {
           description: "Kelola rencana aksi di bawah RHK sebelum task dibentuk.",
           addLabel: "+ Tambah Rencana Aksi",
         },
+        anggaran: {
+          title: "Master Anggaran",
+          description: "Kelola master data anggaran melalui tab internal sesuai domain referensi.",
+          addLabel: null,
+        },
       })[activeMenu],
     [activeMenu]
   );
@@ -1171,6 +2135,14 @@ export default function MasterDataPage() {
     resetForm();
   }
 
+  function closeDeleteModal() {
+    if (isDeleteSubmitting) {
+      return;
+    }
+
+    setDeleteTarget(null);
+  }
+
   function handleChange(event) {
     const { name, value, type, checked } = event.target;
     setForm((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
@@ -1183,6 +2155,10 @@ export default function MasterDataPage() {
     setEditingItem(null);
     resetForm();
     setIsModalOpen(true);
+  }
+
+  function requestDelete(type, item) {
+    setDeleteTarget({ type, item });
   }
 
   function openEditModal(type, item) {
@@ -1215,6 +2191,11 @@ export default function MasterDataPage() {
       output_target: item.output_target != null ? String(item.output_target) : "",
       output_unit: item.output_unit || "",
       level: item.level != null ? String(item.level) : item.sort_order != null ? String(item.sort_order) : "",
+      year: item.year != null ? String(item.year) : "",
+      parent_id: item.parent_id ? String(item.parent_id) : "",
+      budget_level_id: item.budget_level_id ? String(item.budget_level_id) : "",
+      color: item.color || resolveBudgetItemStatusColor(item.code, item.color),
+      is_leaf: item.is_leaf === true,
       is_active: item.is_active !== false,
     });
     setIsModalOpen(true);
@@ -1398,6 +2379,168 @@ export default function MasterDataPage() {
         }
       }
 
+      if (modalType === "akun-belanja") {
+        const normalizedName = form.name.trim();
+
+        if (!normalizedName) {
+          throw new Error("Nama akun wajib diisi.");
+        }
+
+        if (editingItem?.id) {
+          await updateBudgetAccountMetadata(editingItem.id, {
+            name: normalizedName,
+            is_active: Boolean(form.is_active),
+          });
+
+          await loadBudgetAccounts();
+          setMessage("Akun belanja berhasil diperbarui.");
+          closeModal();
+          return;
+        }
+
+        const normalizedCode = derivedBudgetAccountMeta.normalizedCode.toUpperCase();
+
+        if (!normalizedCode) {
+          throw new Error("Kode akun wajib diisi.");
+        }
+
+        if (derivedBudgetAccountMeta.errorMessage) {
+          throw new Error(derivedBudgetAccountMeta.errorMessage);
+        }
+
+        const payload = {
+          code: normalizedCode,
+          name: normalizedName,
+          parent_id: derivedBudgetAccountMeta.parentId,
+          budget_level_id: derivedBudgetAccountMeta.budgetLevelId,
+          is_leaf: derivedBudgetAccountMeta.isLeaf,
+          is_active: Boolean(form.is_active),
+        };
+
+        try {
+          await createBudgetAccount(payload);
+        } catch (error) {
+          if (isDuplicateBudgetAccountCodeError(error)) {
+            throw new Error("Kode akun sudah digunakan");
+          }
+          throw error;
+        }
+
+        await loadBudgetAccounts();
+        setMessage("Akun belanja berhasil ditambahkan.");
+        closeModal();
+        return;
+      }
+
+      if (modalType === "status-item") {
+        const normalizedCode = form.code.trim().toUpperCase();
+        const normalizedName = form.name.trim() || normalizedCode;
+        const resolvedColor = resolveBudgetItemStatusColor(normalizedCode, form.color);
+
+        if (!normalizedCode) {
+          throw new Error("Code wajib diisi.");
+        }
+
+        const duplicateCode = budgetItemStatuses.some(
+          (item) =>
+            String(item.code || "").trim().toUpperCase() === normalizedCode &&
+            String(item.id) !== String(editingItem?.id || "")
+        );
+
+        if (duplicateCode) {
+          throw new Error("Code sudah digunakan.");
+        }
+
+        const payload = {
+          code: normalizedCode,
+          name: normalizedName,
+          color: resolvedColor,
+          is_active: Boolean(form.is_active),
+        };
+
+        try {
+          if (editingItem?.id) {
+            await updateBudgetItemStatus(editingItem.id, payload);
+            setMessage("Status item berhasil diperbarui.");
+          } else {
+            await createBudgetItemStatus(payload);
+            setMessage("Status item berhasil ditambahkan.");
+          }
+        } catch (error) {
+          if (isDuplicateBudgetItemStatusCodeError(error)) {
+            throw new Error("Code sudah digunakan.");
+          }
+          throw error;
+        }
+
+        await loadBudgetItemStatuses();
+        closeModal();
+        return;
+      }
+
+      if (modalType === "tahun-anggaran") {
+        const normalizedYear = String(form.year || "").trim();
+        const startDate = String(form.start_date || "").trim();
+        const endDate = String(form.end_date || "").trim();
+        const isActive = Boolean(form.is_active);
+        const hasRelations = editingItem?.has_relations === true;
+
+        if (!normalizedYear) {
+          throw new Error("Tahun wajib diisi.");
+        }
+
+        if (!startDate || !endDate) {
+          throw new Error("Start Date dan End Date wajib diisi.");
+        }
+
+        if (startDate >= endDate) {
+          throw new Error("Start Date harus lebih kecil dari End Date.");
+        }
+
+        const duplicateYear = budgetYears.some(
+          (item) =>
+            String(item.year || "").trim() === normalizedYear &&
+            String(item.id) !== String(editingItem?.id || "")
+        );
+
+        if (duplicateYear) {
+          throw new Error("Tahun anggaran sudah digunakan.");
+        }
+
+        const payload = hasRelations
+          ? {
+              year: editingItem.year,
+              start_date: editingItem.start_date,
+              end_date: editingItem.end_date,
+              is_active: isActive,
+            }
+          : {
+              year: Number(normalizedYear),
+              start_date: startDate,
+              end_date: endDate,
+              is_active: isActive,
+            };
+
+        try {
+          if (editingItem?.id) {
+            await updateBudgetYear(editingItem.id, payload);
+            setMessage("Tahun anggaran berhasil diperbarui.");
+          } else {
+            await createBudgetYear(payload);
+            setMessage("Tahun anggaran berhasil ditambahkan.");
+          }
+        } catch (error) {
+          if (isDuplicateBudgetYearError(error)) {
+            throw new Error("Tahun anggaran sudah digunakan.");
+          }
+          throw error;
+        }
+
+        await loadBudgetYears();
+        closeModal();
+        return;
+      }
+
       await loadMasterData();
       closeModal();
     } catch (error) {
@@ -1408,8 +2551,6 @@ export default function MasterDataPage() {
   }
 
   const handleDelete = useCallback(async (type, item) => {
-    const label = item.full_name || item.name || item.code || "data ini";
-    if (!window.confirm(`Yakin ingin menghapus ${label}?`)) return;
     setMessage("");
     setErrorMessage("");
 
@@ -1446,13 +2587,118 @@ export default function MasterDataPage() {
         await deleteActionPlan(item.id);
         setMessage("Rencana aksi berhasil dihapus.");
       }
+      if (type === "akun-belanja") {
+        const deleteGuards = await getBudgetAccountDeleteGuards(item.id);
+
+        if (deleteGuards.hasChildren) {
+          throw new Error("Akun tidak bisa dihapus karena masih memiliki akun turunan");
+        }
+
+        if (deleteGuards.isUsedInRak) {
+          throw new Error("Akun tidak bisa dihapus karena sudah digunakan di RAK");
+        }
+
+        if (deleteGuards.isUsedInRealization) {
+          throw new Error("Akun tidak bisa dihapus karena sudah digunakan di Realisasi");
+        }
+
+        await deleteBudgetAccount(item.id);
+        await loadBudgetAccounts();
+        setMessage("Akun belanja berhasil dihapus.");
+        return;
+      }
+      if (type === "status-item") {
+        const deleteGuard = await getBudgetItemStatusDeleteGuard(item.id);
+
+        if (deleteGuard.isUsed) {
+          throw new Error("Status tidak bisa dihapus karena sudah digunakan");
+        }
+
+        await deleteBudgetItemStatus(item.id);
+        await loadBudgetItemStatuses();
+        setMessage("Status item berhasil dihapus.");
+        return;
+      }
+      if (type === "tahun-anggaran") {
+        const deleteGuard = await getBudgetYearUsageGuard(item);
+
+        if (deleteGuard.isUsed) {
+          throw new Error("Tahun anggaran tidak bisa dihapus karena sudah digunakan");
+        }
+
+        await deleteBudgetYear(item.id);
+        await loadBudgetYears();
+        setMessage("Tahun anggaran berhasil dihapus.");
+        return;
+      }
       await loadMasterData();
     } catch (error) {
+      if (type === "akun-belanja") {
+        const errorMessage = String(error?.message || "").toLowerCase();
+
+        if (errorMessage.includes("constraint") || errorMessage.includes("foreign key")) {
+          setErrorMessage("Akun tidak bisa dihapus karena masih terhubung dengan data lain.");
+          return;
+        }
+
+        setErrorMessage(
+          error?.message || "Gagal menghapus akun belanja."
+        );
+        return;
+      }
+
+      if (type === "status-item") {
+        const errorMessage = String(error?.message || "").toLowerCase();
+
+        if (errorMessage.includes("constraint") || errorMessage.includes("foreign key")) {
+          setErrorMessage("Status tidak bisa dihapus karena sudah digunakan");
+          return;
+        }
+
+        setErrorMessage(
+          error?.message || "Gagal menghapus status item."
+        );
+        return;
+      }
+
+      if (type === "tahun-anggaran") {
+        const errorMessage = String(error?.message || "").toLowerCase();
+
+        if (errorMessage.includes("constraint") || errorMessage.includes("foreign key")) {
+          setErrorMessage("Tahun anggaran tidak bisa dihapus karena sudah digunakan");
+          return;
+        }
+
+        setErrorMessage(
+          error?.message || "Gagal menghapus tahun anggaran."
+        );
+        return;
+      }
+
       setErrorMessage(getDeleteErrorMessage(error));
     }
-  }, [loadMasterData]);
+  }, [loadBudgetAccounts, loadBudgetItemStatuses, loadBudgetYears, loadMasterData]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget?.type || !deleteTarget?.item) {
+      return;
+    }
+
+    setIsDeleteSubmitting(true);
+
+    try {
+      await handleDelete(deleteTarget.type, deleteTarget.item);
+      setDeleteTarget(null);
+    } finally {
+      setIsDeleteSubmitting(false);
+    }
+  }, [deleteTarget, handleDelete]);
 
   const tableProps = useMemo(() => {
+    if (activeMenu === "anggaran") {
+      return null;
+    }
+
     if (activeMenu === "pelaksana") {
       return {
         headers: ["Nama", "NIP", "Jabatan", "No. HP", "Email", "Status Aktif", "Aksi"],
@@ -1480,7 +2726,7 @@ export default function MasterDataPage() {
               </span>
             </td>
             <td style={tableBodyCellStyle}>
-              <TableActionButtons prefersDarkMode={prefersDarkMode} onEdit={() => openEditModal("pelaksana", item)} onDelete={() => handleDelete("pelaksana", item)} />
+              <TableActionButtons prefersDarkMode={prefersDarkMode} onEdit={() => openEditModal("pelaksana", item)} onDelete={() => requestDelete("pelaksana", item)} />
             </td>
           </tr>
         )),
@@ -1506,7 +2752,7 @@ export default function MasterDataPage() {
             </td>
             <td style={tableBodyCellStyle}>{item.description || "-"}</td>
             <td style={tableBodyCellStyle}>
-              <TableActionButtons prefersDarkMode={prefersDarkMode} onEdit={() => openEditModal("status", item)} onDelete={() => handleDelete("status", item)} />
+              <TableActionButtons prefersDarkMode={prefersDarkMode} onEdit={() => openEditModal("status", item)} onDelete={() => requestDelete("status", item)} />
             </td>
           </tr>
         )),
@@ -1550,7 +2796,7 @@ export default function MasterDataPage() {
                 <TableActionButtons
                   prefersDarkMode={prefersDarkMode}
                   onEdit={() => openEditModal("prioritas", item)}
-                  onDelete={() => handleDelete("prioritas", item)}
+                  onDelete={() => requestDelete("prioritas", item)}
                 />
               </td>
             </tr>
@@ -1580,7 +2826,7 @@ export default function MasterDataPage() {
             <td style={tableBodyCellStyle}>{formatDateLabel(item.start_date)}</td>
             <td style={tableBodyCellStyle}>{formatDateLabel(item.end_date)}</td>
             <td style={tableBodyCellStyle}>
-              <TableActionButtons prefersDarkMode={prefersDarkMode} onEdit={() => openEditModal("program", item)} onDelete={() => handleDelete("program", item)} />
+              <TableActionButtons prefersDarkMode={prefersDarkMode} onEdit={() => openEditModal("program", item)} onDelete={() => requestDelete("program", item)} />
             </td>
           </tr>
         )),
@@ -1608,7 +2854,7 @@ export default function MasterDataPage() {
             <td style={tableBodyCellStyle}>{statusMap[String(item.status_id)] || "-"}</td>
             <td style={tableBodyCellStyle}>{priorityMap[String(item.priority_id)] || "-"}</td>
             <td style={tableBodyCellStyle}>
-              <TableActionButtons prefersDarkMode={prefersDarkMode} onEdit={() => openEditModal("kegiatan", item)} onDelete={() => handleDelete("kegiatan", item)} />
+              <TableActionButtons prefersDarkMode={prefersDarkMode} onEdit={() => openEditModal("kegiatan", item)} onDelete={() => requestDelete("kegiatan", item)} />
             </td>
           </tr>
         )),
@@ -1669,7 +2915,7 @@ export default function MasterDataPage() {
                   : "Belum ada Rencana Aksi"}
               </td>
               <td style={tableBodyCellStyle}>
-                <TableActionButtons prefersDarkMode={prefersDarkMode} onEdit={() => openEditModal("rhk", item)} onDelete={() => handleDelete("rhk", item)} />
+                <TableActionButtons prefersDarkMode={prefersDarkMode} onEdit={() => openEditModal("rhk", item)} onDelete={() => requestDelete("rhk", item)} />
               </td>
             </tr>
           );
@@ -1742,7 +2988,7 @@ export default function MasterDataPage() {
                 {taskCount > 0 ? `${taskCount} Task` : "Belum ada Task"}
               </td>
               <td style={tableBodyCellStyle}>
-                <TableActionButtons prefersDarkMode={prefersDarkMode} onEdit={() => openEditModal("rencana-aksi", item)} onDelete={() => handleDelete("rencana-aksi", item)} />
+                <TableActionButtons prefersDarkMode={prefersDarkMode} onEdit={() => openEditModal("rencana-aksi", item)} onDelete={() => requestDelete("rencana-aksi", item)} />
               </td>
             </tr>
           );
@@ -1787,7 +3033,7 @@ export default function MasterDataPage() {
               : "-"}
           </td>
           <td style={tableBodyCellStyle}>
-            <TableActionButtons prefersDarkMode={prefersDarkMode} onEdit={() => openEditModal("sub-kegiatan", item)} onDelete={() => handleDelete("sub-kegiatan", item)} />
+            <TableActionButtons prefersDarkMode={prefersDarkMode} onEdit={() => openEditModal("sub-kegiatan", item)} onDelete={() => requestDelete("sub-kegiatan", item)} />
           </td>
         </tr>
       )),
@@ -1802,7 +3048,6 @@ export default function MasterDataPage() {
     employees,
     filteredSortedActionPlans,
     filteredSortedWorkPlans,
-    handleDelete,
     prefersDarkMode,
     primaryColMode2Style,
     primaryColMode3Style,
@@ -1820,6 +3065,397 @@ export default function MasterDataPage() {
     tableBodyCellStyle,
     taskCountByActionPlanMap,
     workPlans,
+  ]);
+
+  const derivedBudgetAccountMeta = (() => {
+    const parsedCode = parseBudgetAccountCode(form.code);
+
+    if (!parsedCode.normalizedCode) {
+      return {
+        normalizedCode: "",
+        levelNumber: null,
+        levelLabel: "-",
+        parentCode: null,
+        parentId: null,
+        parentLabel: "-",
+        budgetLevelId: null,
+        isLeaf: false,
+        leafLabel: "Non-Leaf",
+        errorMessage: "",
+      };
+    }
+
+    if (parsedCode.errorMessage) {
+      return {
+        normalizedCode: parsedCode.normalizedCode,
+        levelNumber: parsedCode.levelNumber,
+        levelLabel: parsedCode.levelNumber ? `Level ${parsedCode.levelNumber}` : "-",
+        parentCode: parsedCode.parentCode,
+        parentId: null,
+        parentLabel: parsedCode.parentCode || "-",
+        budgetLevelId: null,
+        isLeaf: parsedCode.isLeaf,
+        leafLabel: parsedCode.isLeaf ? "Leaf" : "Non-Leaf",
+        errorMessage: parsedCode.errorMessage,
+      };
+    }
+
+    const duplicateCode = budgetAccounts.some(
+      (item) =>
+        String(item.code || "").trim().toUpperCase() ===
+        parsedCode.normalizedCode.toUpperCase()
+    );
+
+    if (duplicateCode) {
+      return {
+        normalizedCode: parsedCode.normalizedCode,
+        levelNumber: parsedCode.levelNumber,
+        levelLabel: parsedCode.levelNumber ? `Level ${parsedCode.levelNumber}` : "-",
+        parentCode: parsedCode.parentCode,
+        parentId: null,
+        parentLabel: parsedCode.parentCode || "-",
+        budgetLevelId: null,
+        isLeaf: parsedCode.isLeaf,
+        leafLabel: parsedCode.isLeaf ? "Leaf" : "Non-Leaf",
+        errorMessage: "Kode akun sudah digunakan",
+      };
+    }
+
+    const parentAccount = parsedCode.parentCode
+      ? budgetAccounts.find(
+          (item) =>
+            String(item.code || "").trim().toUpperCase() ===
+            parsedCode.parentCode.toUpperCase()
+        )
+      : null;
+
+    if (parsedCode.levelNumber > 1 && !parentAccount) {
+      return {
+        normalizedCode: parsedCode.normalizedCode,
+        levelNumber: parsedCode.levelNumber,
+        levelLabel: `Level ${parsedCode.levelNumber}`,
+        parentCode: parsedCode.parentCode,
+        parentId: null,
+        parentLabel: parsedCode.parentCode || "-",
+        budgetLevelId: null,
+        isLeaf: parsedCode.isLeaf,
+        leafLabel: parsedCode.isLeaf ? "Leaf" : "Non-Leaf",
+        errorMessage: "Akun belum memiliki parent",
+      };
+    }
+
+    const matchedBudgetLevel = budgetLevelByNumber[parsedCode.levelNumber];
+
+    if (!matchedBudgetLevel?.id) {
+      return {
+        normalizedCode: parsedCode.normalizedCode,
+        levelNumber: parsedCode.levelNumber,
+        levelLabel: `Level ${parsedCode.levelNumber}`,
+        parentCode: parsedCode.parentCode,
+        parentId: parentAccount?.id || null,
+        parentLabel: parentAccount
+          ? [parentAccount.code, parentAccount.name].filter(Boolean).join(" - ")
+          : "-",
+        budgetLevelId: null,
+        isLeaf: parsedCode.isLeaf,
+        leafLabel: parsedCode.isLeaf ? "Leaf" : "Non-Leaf",
+        errorMessage: "Level akun tidak valid",
+      };
+    }
+
+    return {
+      normalizedCode: parsedCode.normalizedCode,
+      levelNumber: parsedCode.levelNumber,
+      levelLabel: `Level ${matchedBudgetLevel.level_number} - ${matchedBudgetLevel.name}`,
+      parentCode: parsedCode.parentCode,
+      parentId: parentAccount?.id || null,
+      parentLabel: parentAccount
+        ? [parentAccount.code, parentAccount.name].filter(Boolean).join(" - ")
+        : "-",
+      budgetLevelId: matchedBudgetLevel.id,
+      isLeaf: parsedCode.isLeaf,
+      leafLabel: parsedCode.isLeaf ? "Leaf" : "Non-Leaf",
+      errorMessage: "",
+    };
+  })();
+
+  const budgetAccountTableProps = useMemo(() => {
+    if (activeBudgetTab !== "akun-belanja") {
+      return null;
+    }
+
+    const budgetAccountCodeById = Object.fromEntries(
+      budgetAccounts.map((item) => [String(item.id), item.code || "-"])
+    );
+
+    return {
+      headers: ["Kode Akun", "Nama Akun", "Level", "Parent", "Tipe", "Status", "Aksi"],
+      minWidth: 980,
+      columnStyles: [
+        { width: 160, maxWidth: 180, whiteSpace: "nowrap" },
+        primaryColMode3Style,
+        { width: 100, maxWidth: 120, whiteSpace: "nowrap" },
+        { width: 280, maxWidth: 320 },
+        { width: 130, maxWidth: 140, whiteSpace: "nowrap" },
+        { width: 130, maxWidth: 140, whiteSpace: "nowrap" },
+        { width: 190, maxWidth: 220, whiteSpace: "nowrap" },
+      ],
+      emptyText: isBudgetAccountsLoading
+        ? "Memuat data akun belanja..."
+        : budgetAccountsError
+          ? budgetAccountsError
+          : "Belum ada data akun belanja.",
+      rows: isBudgetAccountsLoading || budgetAccountsError
+        ? []
+        : budgetAccounts.map((item) => (
+            <tr key={item.id}>
+              <td style={tableBodyCellStyle}>{item.code || "-"}</td>
+              <td style={{ ...tableBodyCellStyle, ...primaryColMode3Style }}>
+                <div style={getTableCellLabelTypography({ fontSize: 14 })}>
+                  {item.name || "-"}
+                </div>
+              </td>
+              <td style={tableBodyCellStyle}>{item.level_number ?? "-"}</td>
+              <td style={tableBodyCellStyle}>
+                {item.parent_id
+                  ? budgetAccountCodeById[String(item.parent_id)] || "-"
+                  : "-"}
+              </td>
+              <td style={tableBodyCellStyle}>
+                <span
+                  style={getChipStyle(prefersDarkMode, {
+                    tone: item.is_leaf ? "success" : "muted",
+                    size: "sm",
+                    minWidth: 88,
+                    fontWeight: 700,
+                  })}
+                >
+                  {item.is_leaf ? "Leaf" : "Non-Leaf"}
+                </span>
+              </td>
+              <td style={tableBodyCellStyle}>
+                <span
+                  style={getChipStyle(prefersDarkMode, {
+                    tone: item.is_active ? "info" : "disabled",
+                    size: "sm",
+                    minWidth: 88,
+                    fontWeight: 700,
+                  })}
+                >
+                  {item.is_active ? "Aktif" : "Nonaktif"}
+                </span>
+              </td>
+              <td style={tableBodyCellStyle}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => openEditModal("akun-belanja", item)}
+                    style={getInlineActionButtonStyle(prefersDarkMode, {
+                      isEnabled: true,
+                      tone: "accent",
+                      height: 34,
+                    })}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => requestDelete("akun-belanja", item)}
+                    style={getInlineActionButtonStyle(prefersDarkMode, {
+                      isEnabled: true,
+                      tone: "danger",
+                      height: 34,
+                    })}
+                  >
+                    Hapus
+                  </button>
+                </div>
+              </td>
+            </tr>
+          )),
+    };
+  }, [
+    activeBudgetTab,
+    budgetAccounts,
+    budgetAccountsError,
+    isBudgetAccountsLoading,
+    prefersDarkMode,
+    primaryColMode3Style,
+    tableBodyCellStyle,
+  ]);
+
+  const budgetItemStatusTableProps = useMemo(() => {
+    if (activeBudgetTab !== "status-item") {
+      return null;
+    }
+
+    return {
+      headers: ["Code", "Name", "Status", "Status Aktif", "Aksi"],
+      minWidth: 860,
+      columnStyles: [
+        { width: 140, maxWidth: 160, whiteSpace: "nowrap" },
+        primaryColMode3Style,
+        { width: 150, maxWidth: 180, whiteSpace: "nowrap" },
+        { width: 130, maxWidth: 140, whiteSpace: "nowrap" },
+        { width: 180, maxWidth: 220, whiteSpace: "nowrap" },
+      ],
+      emptyText: isBudgetItemStatusesLoading
+        ? "Memuat data status item..."
+        : budgetItemStatusesError
+          ? budgetItemStatusesError
+          : "Belum ada data status item.",
+      rows: isBudgetItemStatusesLoading || budgetItemStatusesError
+        ? []
+        : budgetItemStatuses.map((item) => (
+            <tr key={item.id}>
+              <td style={tableBodyCellStyle}>{item.code || "-"}</td>
+              <td style={{ ...tableBodyCellStyle, ...primaryColMode3Style }}>
+                <div style={getTableCellLabelTypography({ fontSize: 14 })}>
+                  {item.name || "-"}
+                </div>
+              </td>
+              <td style={tableBodyCellStyle}>
+                <span
+                  style={{
+                    ...getChipStyle(prefersDarkMode, {
+                      size: "xs",
+                      tone: getBudgetItemStatusChipTone(item.code),
+                    }),
+                    fontWeight: 500,
+                  }}
+                >
+                  {item.code || "-"}
+                </span>
+              </td>
+              <td style={tableBodyCellStyle}>
+                <span
+                  style={getChipStyle(prefersDarkMode, {
+                    tone: item.is_active ? "info" : "disabled",
+                    size: "sm",
+                    minWidth: 88,
+                    fontWeight: 700,
+                  })}
+                >
+                  {item.is_active ? "Aktif" : "Nonaktif"}
+                </span>
+              </td>
+              <td style={tableBodyCellStyle}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => openEditModal("status-item", item)}
+                    style={getInlineActionButtonStyle(prefersDarkMode, {
+                      isEnabled: true,
+                      tone: "accent",
+                      height: 34,
+                    })}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => requestDelete("status-item", item)}
+                    style={getInlineActionButtonStyle(prefersDarkMode, {
+                      isEnabled: true,
+                      tone: "danger",
+                      height: 34,
+                    })}
+                  >
+                    Hapus
+                  </button>
+                </div>
+              </td>
+            </tr>
+          )),
+    };
+  }, [
+    activeBudgetTab,
+    budgetItemStatuses,
+    budgetItemStatusesError,
+    isBudgetItemStatusesLoading,
+    prefersDarkMode,
+    primaryColMode3Style,
+    tableBodyCellStyle,
+  ]);
+
+  const budgetYearTableProps = useMemo(() => {
+    if (activeBudgetTab !== "tahun-anggaran") {
+      return null;
+    }
+
+    return {
+      headers: ["Tahun", "Periode", "Status", "Aksi"],
+      minWidth: 760,
+      columnStyles: [
+        { width: 120, maxWidth: 140, whiteSpace: "nowrap" },
+        primaryColMode3Style,
+        { width: 130, maxWidth: 150, whiteSpace: "nowrap" },
+        { width: 180, maxWidth: 220, whiteSpace: "nowrap" },
+      ],
+      emptyText: isBudgetYearsLoading
+        ? "Memuat data tahun anggaran..."
+        : budgetYearsError
+          ? budgetYearsError
+          : "Belum ada data tahun anggaran.",
+      rows: isBudgetYearsLoading || budgetYearsError
+        ? []
+        : budgetYears.map((item) => (
+            <tr key={item.id}>
+              <td style={tableBodyCellStyle}>{item.year || "-"}</td>
+              <td style={{ ...tableBodyCellStyle, ...primaryColMode3Style }}>
+                <div style={getTableCellLabelTypography({ fontSize: 14 })}>
+                  {`${formatPeriodDateLabel(item.start_date)} - ${formatPeriodDateLabel(item.end_date)}`}
+                </div>
+              </td>
+              <td style={tableBodyCellStyle}>
+                <span
+                  style={getChipStyle(prefersDarkMode, {
+                    tone: item.is_active ? "success" : "neutral",
+                    size: "sm",
+                    minWidth: 96,
+                    fontWeight: 700,
+                  })}
+                >
+                  {item.is_active ? "Aktif" : "Tidak Aktif"}
+                </span>
+              </td>
+              <td style={tableBodyCellStyle}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => openEditModal("tahun-anggaran", item)}
+                    style={getInlineActionButtonStyle(prefersDarkMode, {
+                      isEnabled: true,
+                      tone: "accent",
+                      height: 34,
+                    })}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => requestDelete("tahun-anggaran", item)}
+                    style={getInlineActionButtonStyle(prefersDarkMode, {
+                      isEnabled: true,
+                      tone: "danger",
+                      height: 34,
+                    })}
+                  >
+                    Hapus
+                  </button>
+                </div>
+              </td>
+            </tr>
+          )),
+    };
+  }, [
+    activeBudgetTab,
+    budgetYears,
+    budgetYearsError,
+    isBudgetYearsLoading,
+    prefersDarkMode,
+    primaryColMode3Style,
+    tableBodyCellStyle,
   ]);
 
   return (
@@ -1856,7 +3492,12 @@ export default function MasterDataPage() {
             <button
               key={menu.key}
               type="button"
-              onClick={() => setActiveMenu(menu.key)}
+              onClick={() => {
+                setActiveMenu(menu.key);
+                if (menu.key === "anggaran") {
+                  setActiveBudgetTab("akun-belanja");
+                }
+              }}
               className={`sub-page-button ${activeMenu === menu.key ? "sub-page-button--active" : "sub-page-button--inactive"}`}
             >
               {menu.label}
@@ -1904,17 +3545,122 @@ export default function MasterDataPage() {
               <h2 style={{ margin: 0, fontSize: 20, color: "var(--text-h)" }}>{moduleMeta.title}</h2>
               <div style={{ marginTop: 6, color: "var(--text-muted)", fontSize: 13 }}>{moduleMeta.description}</div>
             </div>
-            <button
-              type="button"
-              onClick={() => openCreateModal(activeMenu)}
-              style={{
-                ...getPrimaryButtonStyle(prefersDarkMode, { isEnabled: true, height: 40 }),
-                minWidth: 170,
-              }}
-            >
-              {moduleMeta.addLabel}
-            </button>
+            {moduleMeta.addLabel ? (
+              <button
+                type="button"
+                onClick={() => openCreateModal(activeMenu)}
+                style={{
+                  ...getPrimaryButtonStyle(prefersDarkMode, { isEnabled: true, height: 40 }),
+                  minWidth: 170,
+                }}
+              >
+                {moduleMeta.addLabel}
+              </button>
+            ) : null}
           </div>
+
+          {activeMenu === "anggaran" ? (
+            <>
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 18,
+                  alignItems: "flex-end",
+                  padding: "0 0 2px 0",
+                }}
+              >
+                {budgetTabs.map((tab) => {
+                  const isActive = activeBudgetTab === tab.key;
+
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setActiveBudgetTab(tab.key)}
+                      style={{
+                        border: "none",
+                        background: "transparent",
+                        boxShadow: "none",
+                        borderRadius: 0,
+                        borderBottom: isActive
+                          ? "2px solid var(--btn-primary-bg)"
+                          : "2px solid transparent",
+                        color: isActive ? "var(--text-h)" : "var(--text-muted)",
+                        padding: "0 0 10px 0",
+                        fontSize: 14,
+                        fontWeight: isActive ? 600 : 500,
+                        lineHeight: 1.2,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                        fontFamily: '"Inter", sans-serif',
+                        transition: "color 140ms ease, border-color 140ms ease",
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+            </>
+          ) : null}
+
+          {activeMenu === "anggaran" && activeBudgetTab === "status-item" && budgetItemStatusTableProps ? (
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => openCreateModal("status-item")}
+                  style={{
+                    ...getPrimaryButtonStyle(prefersDarkMode, { isEnabled: true, height: 40 }),
+                    minWidth: 170,
+                  }}
+                >
+                  + Tambah Status
+                </button>
+              </div>
+              <div style={tableFrameStyle}>
+                <div style={{ overflowX: "auto" }}>
+                  <DataTable
+                    headers={budgetItemStatusTableProps.headers}
+                    rows={budgetItemStatusTableProps.rows}
+                    emptyText={budgetItemStatusTableProps.emptyText}
+                    columnStyles={budgetItemStatusTableProps.columnStyles}
+                    minWidth={budgetItemStatusTableProps.minWidth}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {activeMenu === "anggaran" && activeBudgetTab === "tahun-anggaran" && budgetYearTableProps ? (
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => openCreateModal("tahun-anggaran")}
+                  style={{
+                    ...getPrimaryButtonStyle(prefersDarkMode, { isEnabled: true, height: 40 }),
+                    minWidth: 180,
+                  }}
+                >
+                  + Tambah Tahun
+                </button>
+              </div>
+              <div style={tableFrameStyle}>
+                <div style={{ overflowX: "auto" }}>
+                  <DataTable
+                    headers={budgetYearTableProps.headers}
+                    rows={budgetYearTableProps.rows}
+                    emptyText={budgetYearTableProps.emptyText}
+                    columnStyles={budgetYearTableProps.columnStyles}
+                    minWidth={budgetYearTableProps.minWidth}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {activeMenu === "rhk" ? (
             <div
@@ -2122,37 +3868,140 @@ export default function MasterDataPage() {
             </div>
           ) : null}
 
-          <div style={tableFrameStyle}>
-            <div style={{ overflowX: "auto" }}>
-              <DataTable
-                headers={tableProps.headers}
-                rows={tableProps.rows}
-                emptyText={tableProps.emptyText}
-                columnStyles={tableProps.columnStyles}
-                minWidth={tableProps.minWidth}
-              />
+          {activeMenu === "anggaran" && activeBudgetTab === "akun-belanja" && budgetAccountTableProps ? (
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => openCreateModal("akun-belanja")}
+                  style={{
+                    ...getPrimaryButtonStyle(prefersDarkMode, { isEnabled: true, height: 40 }),
+                    minWidth: 170,
+                  }}
+                >
+                  + Tambah Akun
+                </button>
+              </div>
+              <div style={tableFrameStyle}>
+              <div style={{ overflowX: "auto" }}>
+                <DataTable
+                  headers={budgetAccountTableProps.headers}
+                  rows={budgetAccountTableProps.rows}
+                  emptyText={budgetAccountTableProps.emptyText}
+                  columnStyles={budgetAccountTableProps.columnStyles}
+                  minWidth={budgetAccountTableProps.minWidth}
+                />
+              </div>
+              </div>
             </div>
-          </div>
+          ) : null}
+
+          {tableProps ? (
+            <div style={tableFrameStyle}>
+              <div style={{ overflowX: "auto" }}>
+                <DataTable
+                  headers={tableProps.headers}
+                  rows={tableProps.rows}
+                  emptyText={tableProps.emptyText}
+                  columnStyles={tableProps.columnStyles}
+                  minWidth={tableProps.minWidth}
+                />
+              </div>
+            </div>
+          ) : null}
         </section>
       </div>
 
-      <MasterFormModal
-        isOpen={isModalOpen}
-        title={`${editingItem ? "Edit" : "Tambah"} ${menus.find((item) => item.key === modalType)?.label || ""}`}
-        onClose={closeModal}
-        onSubmit={handleSubmit}
-        isSubmitting={isSubmitting}
+      {modalType === "akun-belanja" ? (
+        <BudgetAccountFormModal
+          isOpen={isModalOpen}
+          onClose={closeModal}
+          onSubmit={handleSubmit}
+          isSubmitting={isSubmitting}
+          prefersDarkMode={prefersDarkMode}
+          form={form}
+          onChange={handleChange}
+          derivedBudgetAccountMeta={derivedBudgetAccountMeta}
+          isEditMode={Boolean(editingItem?.id)}
+        />
+      ) : modalType === "tahun-anggaran" ? (
+        <BudgetYearFormModal
+          isOpen={isModalOpen}
+          onClose={closeModal}
+          onSubmit={handleSubmit}
+          isSubmitting={isSubmitting}
+          prefersDarkMode={prefersDarkMode}
+          form={form}
+          onChange={handleChange}
+          isEditMode={Boolean(editingItem?.id)}
+          isLocked={editingItem?.has_relations === true}
+        />
+      ) : modalType === "status-item" ? (
+        <BudgetItemStatusFormModal
+          isOpen={isModalOpen}
+          onClose={closeModal}
+          onSubmit={handleSubmit}
+          isSubmitting={isSubmitting}
+          prefersDarkMode={prefersDarkMode}
+          form={form}
+          onChange={handleChange}
+          isEditMode={Boolean(editingItem?.id)}
+        />
+      ) : (
+        <MasterFormModal
+          isOpen={isModalOpen}
+          title={`${editingItem ? "Edit" : "Tambah"} ${menus.find((item) => item.key === modalType)?.label || ""}`}
+          onClose={closeModal}
+          onSubmit={handleSubmit}
+          isSubmitting={isSubmitting}
+          prefersDarkMode={prefersDarkMode}
+          form={form}
+          onChange={handleChange}
+          type={modalType}
+          statuses={statuses}
+          priorities={priorities}
+          programs={programs}
+          activities={activities}
+          subActivities={subActivities}
+          employees={employees}
+          workPlans={workPlans}
+        />
+      )}
+
+      <DeleteConfirmModal
+        isOpen={Boolean(deleteTarget)}
+        onClose={closeDeleteModal}
+        onConfirm={confirmDelete}
+        isSubmitting={isDeleteSubmitting}
         prefersDarkMode={prefersDarkMode}
-        form={form}
-        onChange={handleChange}
-        type={modalType}
-        statuses={statuses}
-        priorities={priorities}
-        programs={programs}
-        activities={activities}
-        subActivities={subActivities}
-        employees={employees}
-        workPlans={workPlans}
+        title={
+          deleteTarget?.type === "akun-belanja"
+            ? "Hapus Akun Belanja"
+            : deleteTarget?.type === "status-item"
+              ? "Hapus Status Item"
+              : deleteTarget?.type === "tahun-anggaran"
+                ? "Hapus Tahun Anggaran"
+              : "Hapus Data"
+        }
+        message={
+          deleteTarget?.type === "akun-belanja"
+            ? `Yakin ingin menghapus akun ${[
+                deleteTarget?.item?.code,
+                deleteTarget?.item?.name,
+              ]
+                .filter(Boolean)
+                .join(" - ")}?`
+            : deleteTarget?.type === "status-item"
+              ? `Yakin ingin menghapus status ${[
+                  deleteTarget?.item?.code,
+                  deleteTarget?.item?.name,
+                ]
+                  .filter(Boolean)
+                  .join(" - ")}?`
+              : deleteTarget?.type === "tahun-anggaran"
+                ? `Yakin ingin menghapus tahun anggaran ${deleteTarget?.item?.year || "-"}?`
+            : `Yakin ingin menghapus ${deleteTarget?.item?.full_name || deleteTarget?.item?.name || deleteTarget?.item?.code || "data ini"}?`
+        }
       />
     </div>
   );

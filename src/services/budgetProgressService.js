@@ -68,6 +68,138 @@ function getProgressStatus(progressPercent) {
   return "ON_TRACK";
 }
 
+function getTrackingIndicator(progressPercent) {
+  const normalizedProgress = toProgressNumber(progressPercent);
+
+  if (normalizedProgress > 100) {
+    return {
+      label: "OVERSPEND",
+      tone: "danger",
+    };
+  }
+
+  if (normalizedProgress >= 80) {
+    return {
+      label: "SUCCESS",
+      tone: "success",
+    };
+  }
+
+  if (normalizedProgress >= 50) {
+    return {
+      label: "WARNING",
+      tone: "warning",
+    };
+  }
+
+  return {
+    label: "DANGER",
+    tone: "danger",
+  };
+}
+
+function getSubActivityMergeKey(row) {
+  return (
+    row?.sub_activity_id ||
+    row?.rak_sub_activity_id ||
+    null
+  );
+}
+
+function buildSignalCountMap(rows = [], predicate = null) {
+  const counts = new Map();
+
+  rows.forEach((row) => {
+    if (typeof predicate === "function" && !predicate(row)) {
+      return;
+    }
+
+    const mergeKey = getSubActivityMergeKey(row);
+
+    if (!mergeKey) {
+      return;
+    }
+
+    counts.set(mergeKey, Number(counts.get(mergeKey) || 0) + 1);
+  });
+
+  return counts;
+}
+
+function hasMeaningfulDeviation(row) {
+  return Math.abs(toNumericAmount(row?.annual_deviation_percent)) > 0.01;
+}
+
+function getBudgetAccountMergeKey(row) {
+  return row?.budget_account_id || row?.budget_account_code || null;
+}
+
+function getBudgetAccountName(row) {
+  return (
+    row?.budget_account_name ||
+    row?.budget_account_full_name ||
+    row?.budget_account_title ||
+    row?.account_name ||
+    null
+  );
+}
+
+async function loadTrackingWarningRows(rakVersionId) {
+  const rawRows =
+    (await unwrapQueryResult(
+      supabase
+        .from("fin_v_tracking_budget_warnings")
+        .select("*")
+        .eq("rak_version_id", rakVersionId)
+        .order("sub_activity_code", { ascending: true })
+        .order("budget_account_code", { ascending: true })
+    )) || [];
+
+  return rawRows;
+}
+
+async function loadTrackingDeviationRows(rakVersionId) {
+  const rawRows =
+    (await unwrapQueryResult(
+      supabase
+        .from("fin_v_tracking_budget_deviations")
+        .select("*")
+        .eq("rak_version_id", rakVersionId)
+        .order("sub_activity_code", { ascending: true })
+        .order("budget_account_code", { ascending: true })
+    )) || [];
+
+  return rawRows;
+}
+
+function mapTrackingDetailRow(row) {
+  const planAmount = toNumericAmount(row?.annual_plan);
+  const realizationAmount = toNumericAmount(row?.annual_realization);
+  const deviationAmount =
+    row?.annual_balance !== undefined && row?.annual_balance !== null
+      ? toNumericAmount(row?.annual_balance)
+      : planAmount - realizationAmount;
+  const deviationPercent =
+    row?.annual_deviation_percent !== undefined &&
+    row?.annual_deviation_percent !== null
+      ? toNumericAmount(row?.annual_deviation_percent)
+      : Math.abs(getSafeProgressPercent(planAmount, deviationAmount));
+
+  return {
+    budget_account_id: row?.budget_account_id || null,
+    budget_account_code: row?.budget_account_code || null,
+    budget_account_name: getBudgetAccountName(row),
+    plan_amount: planAmount,
+    realization_amount: realizationAmount,
+    deviation_amount: deviationAmount,
+    deviation_percent: deviationPercent,
+    warning_count: 0,
+    warning_messages: [],
+    is_overspend: realizationAmount > planAmount,
+    has_deviation: Math.abs(deviationAmount) > 0.01,
+  };
+}
+
 function mapProgressRow(row) {
   const annualPlan = toNumericAmount(row?.annual_plan);
   const annualRealization = toNumericAmount(row?.annual_realization);
@@ -214,5 +346,184 @@ export async function getBudgetProgress(rakVersionId = null, fiscalYearId = null
     detailRows,
     warnings,
     requestKey: toRequestKey(version.id),
+  };
+}
+
+export async function getBudgetTrackingProgress(
+  rakVersionId = null,
+  fiscalYearId = null
+) {
+  const result = await getBudgetProgress(rakVersionId, fiscalYearId);
+
+  let warningCountBySubActivity = new Map();
+  let deviationCountBySubActivity = new Map();
+  const signalWarnings = [];
+
+  if (result.rakVersion?.id) {
+    const [warningResult, deviationResult] = await Promise.allSettled([
+      loadTrackingWarningRows(result.rakVersion.id),
+      loadTrackingDeviationRows(result.rakVersion.id),
+    ]);
+
+    if (warningResult.status === "fulfilled") {
+      warningCountBySubActivity = buildSignalCountMap(warningResult.value);
+    } else {
+      signalWarnings.push(
+        "Data warning tracking gagal dimuat. Sinyal warning mungkin belum lengkap."
+      );
+    }
+
+    if (deviationResult.status === "fulfilled") {
+      deviationCountBySubActivity = buildSignalCountMap(
+        deviationResult.value,
+        hasMeaningfulDeviation
+      );
+    } else {
+      signalWarnings.push(
+        "Data deviation tracking gagal dimuat. Sinyal deviation mungkin belum lengkap."
+      );
+    }
+  }
+
+  const rows = (result.rows || []).map((row) => {
+    const planAmount = toNumericAmount(row.annual_plan);
+    const realizationAmount = toNumericAmount(row.annual_realization);
+    const progressPercentage = getSafeProgressPercent(planAmount, realizationAmount);
+    const mergeKey = getSubActivityMergeKey(row);
+    const warningCount = Number(warningCountBySubActivity.get(mergeKey) || 0);
+    const deviationCount = Number(deviationCountBySubActivity.get(mergeKey) || 0);
+
+    return {
+      ...row,
+      plan_amount: planAmount,
+      realization_amount: realizationAmount,
+      progress_percentage: progressPercentage,
+      tracking_indicator: getTrackingIndicator(progressPercentage),
+      warning_count: warningCount,
+      deviation_count: deviationCount,
+    };
+  });
+
+  const summary = rows.reduce(
+    (accumulator, row) => ({
+      total_plan: accumulator.total_plan + toNumericAmount(row.plan_amount),
+      total_realization:
+        accumulator.total_realization + toNumericAmount(row.realization_amount),
+      total_warning_count:
+        accumulator.total_warning_count + Number(row.warning_count || 0),
+      total_deviation_count:
+        accumulator.total_deviation_count + Number(row.deviation_count || 0),
+    }),
+    {
+      total_plan: 0,
+      total_realization: 0,
+      total_warning_count: 0,
+      total_deviation_count: 0,
+    }
+  );
+
+  return {
+    ...result,
+    rows,
+    summary: {
+      ...summary,
+      overall_percentage: getSafeProgressPercent(
+        summary.total_plan,
+        summary.total_realization
+      ),
+    },
+    warnings: [...(result.warnings || []), ...signalWarnings],
+    requestKey: toRequestKey(result.rakVersion?.id, "tracking"),
+  };
+}
+
+export async function getBudgetTrackingDetailBySubActivity(
+  rakVersionId,
+  subActivityId
+) {
+  if (!rakVersionId) {
+    throw new Error("rakVersionId wajib diisi untuk detail tracking.");
+  }
+
+  if (!subActivityId) {
+    throw new Error("subActivityId wajib diisi untuk detail tracking.");
+  }
+
+  const [deviationRows, warningRows] = await Promise.all([
+    unwrapQueryResult(
+      supabase
+        .from("fin_v_tracking_budget_deviations")
+        .select("*")
+        .eq("rak_version_id", rakVersionId)
+        .eq("sub_activity_id", subActivityId)
+        .order("budget_account_code", { ascending: true })
+    ),
+    unwrapQueryResult(
+      supabase
+        .from("fin_v_tracking_budget_warnings")
+        .select("*")
+        .eq("rak_version_id", rakVersionId)
+        .eq("sub_activity_id", subActivityId)
+        .order("budget_account_code", { ascending: true })
+    ),
+  ]);
+
+  const mergedRows = new Map();
+
+  (deviationRows || []).forEach((row) => {
+    const mergeKey = getBudgetAccountMergeKey(row);
+
+    if (!mergeKey) {
+      return;
+    }
+
+    mergedRows.set(mergeKey, mapTrackingDetailRow(row));
+  });
+
+  (warningRows || []).forEach((row) => {
+    const mergeKey = getBudgetAccountMergeKey(row);
+
+    if (!mergeKey) {
+      return;
+    }
+
+    const currentRow =
+      mergedRows.get(mergeKey) ||
+      mapTrackingDetailRow({
+        ...row,
+        annual_balance:
+          row?.annual_balance !== undefined && row?.annual_balance !== null
+            ? row.annual_balance
+            : toNumericAmount(row?.annual_plan) - toNumericAmount(row?.annual_realization),
+        annual_deviation_percent: null,
+      });
+    const warningMessage =
+      String(row?.warning_label || row?.warning_type || "")
+        .trim()
+        .replaceAll("_", " ") || null;
+
+    mergedRows.set(mergeKey, {
+      ...currentRow,
+      budget_account_id: currentRow.budget_account_id || row?.budget_account_id || null,
+      budget_account_code:
+        currentRow.budget_account_code || row?.budget_account_code || null,
+      budget_account_name:
+        currentRow.budget_account_name || getBudgetAccountName(row) || null,
+      warning_count: Number(currentRow.warning_count || 0) + 1,
+      warning_messages: warningMessage
+        ? [...(currentRow.warning_messages || []), warningMessage]
+        : currentRow.warning_messages || [],
+    });
+  });
+
+  const rows = [...mergedRows.values()].sort((leftRow, rightRow) => {
+    const leftCode = String(leftRow?.budget_account_code || "");
+    const rightCode = String(rightRow?.budget_account_code || "");
+    return leftCode.localeCompare(rightCode, "id");
+  });
+
+  return {
+    rows,
+    requestKey: `${rakVersionId}:${subActivityId}:tracking-detail`,
   };
 }

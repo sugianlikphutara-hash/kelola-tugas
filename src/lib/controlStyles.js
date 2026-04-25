@@ -994,6 +994,24 @@ export function getTableCellLabelTypography(options = {}) {
   };
 }
 
+/** Secondary label for nested/child table rows */
+export function getTableCellSecondaryLabelTypography(options = {}) {
+  const {
+    fontSize = 13,
+    fontWeight = 500,
+    color = "var(--text-h)",
+    lineHeight = 1.4,
+  } = options;
+
+  return {
+    fontSize,
+    fontWeight,
+    color,
+    lineHeight,
+    fontFamily: '"Inter", sans-serif',
+  };
+}
+
 /** Subtitle in Cell: Small + Regular + Grey */
 export function getTableCellSubtitleTypography(options = {}) {
   const {

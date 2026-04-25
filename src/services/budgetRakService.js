@@ -224,6 +224,36 @@ export async function getDraftRakVersionById(rakVersionId) {
   ) || null;
 }
 
+export async function updateDraftRakVersionMetadata(rakVersionId, payload = {}) {
+  if (!rakVersionId) {
+    throw new Error("rakVersionId wajib diisi untuk update metadata RAK.");
+  }
+
+  const existingVersion = await getRakVersionById(rakVersionId);
+
+  if (!existingVersion?.id || existingVersion.status !== "DRAFT") {
+    throw new Error("Versi RAK ini sudah tidak berstatus DRAFT. Refresh halaman.");
+  }
+
+  return (
+    await unwrapQueryResult(
+      supabase
+        .from("fin_rak_versions")
+        .update({
+          title: payload.title ?? existingVersion.title ?? null,
+          notes: payload.notes ?? existingVersion.notes ?? null,
+          rak_date: payload.rak_date ?? existingVersion.rak_date ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", rakVersionId)
+        .eq("status", "DRAFT")
+        .eq("is_active", false)
+        .select("*")
+        .single()
+    )
+  ) || null;
+}
+
 export async function getRakSubActivitySummary(rakVersionId) {
   return (
     await unwrapQueryResult(
