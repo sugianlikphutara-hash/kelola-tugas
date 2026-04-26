@@ -1059,74 +1059,8 @@ export async function getTaskKanbanCards() {
   return data || [];
 }
 
-async function updateTaskKanbanCardPosition(cardId, columnId, sortOrder) {
-  const { data, error } = await supabase
-    .from("kanban_cards")
-    .update({
-      column_id: columnId,
-      sort_order: sortOrder,
-    })
-    .eq("id", cardId)
-    .select()
-    .single();
-
-  if (error) {
-    console.error(error);
-    throw error;
-  }
-
-  return data;
-}
-
-async function syncTaskStatusWithKanbanColumn(taskId, columnId) {
-  const { data: columnData, error: columnError } = await supabase
-    .from("kanban_columns")
-    .select("id, code")
-    .eq("id", columnId)
-    .maybeSingle();
-
-  if (columnError) {
-    console.error(columnError);
-    throw columnError;
-  }
-
-  const columnCode = columnData?.code;
-  if (!columnCode) {
-    return null;
-  }
-
-  const { data: statusData, error: statusError } = await supabase
-    .from("master_statuses")
-    .select("id, code")
-    .eq("category", "task")
-    .eq("code", columnCode)
-    .maybeSingle();
-
-  if (statusError) {
-    console.error(statusError);
-    throw statusError;
-  }
-
-  if (!statusData?.id) {
-    return null;
-  }
-
-  const { data, error } = await supabase.rpc("move_task_kanban", {
-    p_task_id: taskId,
-    p_status_id: statusData.id,
-  });
-
-  if (error) {
-    console.error(error);
-    throw error;
-  }
-
-  return data;
-}
-
 export async function moveTaskKanbanCard({
   taskId,
-  cardId,
   targetColumnId,
   targetSortOrder,
 }) {
@@ -1137,17 +1071,11 @@ export async function moveTaskKanbanCard({
   }
 
   const [
-    { data: currentCard, error: currentCardError },
     { data: currentTask, error: currentTaskError },
     { data: targetColumn, error: targetColumnError },
     { data: taskContext, error: taskContextError },
   ] =
     await Promise.all([
-      supabase
-        .from("kanban_cards")
-        .select("id, column_id, sort_order")
-        .eq("id", cardId)
-        .single(),
       supabase.from("tasks").select("id, status_id").eq("id", taskId).single(),
       supabase.from("kanban_columns").select("id, code").eq("id", targetColumnId).single(),
       supabase
@@ -1156,11 +1084,6 @@ export async function moveTaskKanbanCard({
         .eq("task_id", taskId)
         .maybeSingle(),
     ]);
-
-  if (currentCardError) {
-    console.error(currentCardError);
-    throw currentCardError;
-  }
 
   if (currentTaskError) {
     console.error(currentTaskError);
@@ -1194,28 +1117,21 @@ export async function moveTaskKanbanCard({
     throw new Error("Anda hanya dapat memindahkan task yang ditugaskan kepada Anda.");
   }
 
-  const updatedCard = await updateTaskKanbanCardPosition(
-    cardId,
-    targetColumnId,
-    targetSortOrder
-  );
+  const { data, error } = await supabase.rpc("manage_task_kanban_card", {
+    p_action: "move",
+    p_task_id: taskId,
+    p_target_column_id: targetColumnId,
+    p_target_sort_order: targetSortOrder,
+    p_status_id: null,
+    p_approval_status: null,
+  });
 
-  try {
-    await syncTaskStatusWithKanbanColumn(taskId, targetColumnId);
-    return updatedCard;
-  } catch (error) {
-    try {
-      await updateTaskKanbanCardPosition(
-        cardId,
-        currentCard.column_id,
-        currentCard.sort_order
-      );
-    } catch (rollbackError) {
-      console.error("Rollback move task kanban gagal", rollbackError);
-    }
-
+  if (error) {
+    console.error(error);
     throw error;
   }
+
+  return data?.card || null;
 }
 
 async function getTaskStatusCode(statusId) {
@@ -1238,148 +1154,26 @@ async function getTaskStatusCode(statusId) {
   return data?.code || null;
 }
 
-async function getTaskKanbanColumnByCode(statusCode) {
-  if (!statusCode) {
-    return null;
-  }
-
-  const { data, error } = await supabase
-    .from("kanban_columns")
-    .select("id, code, module_name")
-    .eq("module_name", "task")
-    .eq("code", statusCode)
-    .maybeSingle();
-
-  if (error) {
-    console.error(error);
-    throw error;
-  }
-
-  return data || null;
-}
-
-async function getLastTaskKanbanSortOrder(columnId) {
-  const { data, error } = await supabase
-    .from("kanban_cards")
-    .select("sort_order")
-    .eq("entity_type", "task")
-    .eq("column_id", columnId)
-    .order("sort_order", { ascending: false })
-    .limit(1);
-
-  if (error) {
-    console.error(error);
-    throw error;
-  }
-
-  return Number(data?.[0]?.sort_order || 0);
-}
-
-async function getCurrentTaskKanbanCard(taskId) {
-  const { data: currentCard, error: currentCardError } = await supabase
-    .from("kanban_cards")
-    .select("id, column_id, sort_order")
-    .eq("entity_type", "task")
-    .eq("entity_id", taskId)
-    .maybeSingle();
-
-  if (currentCardError) {
-    console.error(currentCardError);
-    throw currentCardError;
-  }
-
-  return currentCard || null;
-}
-
-async function removeTaskKanbanCard(taskId) {
-  const currentCard = await getCurrentTaskKanbanCard(taskId);
-  if (!currentCard?.id) {
-    return null;
-  }
-
-  const { error } = await supabase
-    .from("kanban_cards")
-    .delete()
-    .eq("id", currentCard.id);
-
-  if (error) {
-    console.error(error);
-    throw error;
-  }
-
-  return currentCard;
-}
-
 async function syncTaskKanbanCard(taskId, statusId, approvalStatus) {
   if (!taskId || !statusId) {
     return null;
   }
 
-  const statusCode = await getTaskStatusCode(statusId);
-  if (!statusCode) {
-    return null;
-  }
-
-  const normalizedApprovalStatus = String(approvalStatus || "").toLowerCase();
-  const normalizedStatusCode = String(statusCode || "").toLowerCase();
-
-  if (
-    normalizedApprovalStatus !== "approved" ||
-    normalizedStatusCode === "dibatalkan"
-  ) {
-    return removeTaskKanbanCard(taskId);
-  }
-
-  const targetColumn = await getTaskKanbanColumnByCode(statusCode);
-  if (!targetColumn?.id) {
-    return null;
-  }
-
-  const currentCard = await getCurrentTaskKanbanCard(taskId);
-  if (currentCard?.column_id === targetColumn.id) {
-    return currentCard;
-  }
-
-  const nextSortOrder = (await getLastTaskKanbanSortOrder(targetColumn.id)) + 1;
-
-  if (currentCard?.id) {
-    const { data, error } = await supabase
-      .from("kanban_cards")
-      .update({
-        column_id: targetColumn.id,
-        sort_order: nextSortOrder,
-      })
-      .eq("id", currentCard.id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error(error);
-      throw error;
-    }
-
-    return data;
-  }
-
-  const { data, error } = await supabase
-    .from("kanban_cards")
-    .insert([
-      {
-        entity_type: "task",
-        entity_id: taskId,
-        column_id: targetColumn.id,
-        sort_order: nextSortOrder,
-      },
-    ])
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("manage_task_kanban_card", {
+    p_action: "sync",
+    p_task_id: taskId,
+    p_target_column_id: null,
+    p_target_sort_order: null,
+    p_status_id: statusId,
+    p_approval_status: approvalStatus,
+  });
 
   if (error) {
     console.error(error);
     throw error;
   }
 
-  return data;
+  return data?.card || null;
 }
 export async function deleteTask(taskId) {
   const roleCode = getCurrentAuthenticatedRoleCode();
