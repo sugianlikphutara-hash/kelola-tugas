@@ -1561,21 +1561,15 @@ export async function createTaskFollowUp(payload) {
   );
   await assertCanCreateTaskFollowUp(payload.task_id, createdByEmployeeId);
 
-  const { data, error } = await supabase
-    .from("task_follow_ups")
-    .insert([
-      {
-        task_id: payload.task_id,
-        note_text: payload.note_text,
-        created_by_employee_id: createdByEmployeeId,
-        is_followed_up: false,
-        followed_up_at: null,
-        followed_up_by_employee_id: null,
-        notes: payload.notes ?? null,
-      },
-    ])
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("manage_task_follow_up", {
+    p_action: "create",
+    p_task_id: payload.task_id,
+    p_follow_up_id: null,
+    p_payload: {
+      note_text: payload.note_text,
+      notes: payload.notes ?? null,
+    },
+  });
 
   if (error) {
     console.error(error);
@@ -2506,24 +2500,14 @@ export async function updateTaskFollowUpStatus(
     }
   }
 
-  const payload = isFollowedUp
-    ? {
-        is_followed_up: true,
-        followed_up_at: new Date().toISOString(),
-        followed_up_by_employee_id: actorEmployeeId,
-      }
-    : {
-        is_followed_up: false,
-        followed_up_at: null,
-        followed_up_by_employee_id: null,
-      };
-
-  const { data, error } = await supabase
-    .from("task_follow_ups")
-    .update(payload)
-    .eq("id", followUpId)
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("manage_task_follow_up", {
+    p_action: "update_status",
+    p_task_id: null,
+    p_follow_up_id: followUpId,
+    p_payload: {
+      is_followed_up: isFollowedUp,
+    },
+  });
 
   if (error) {
     console.error(error);
@@ -2535,7 +2519,7 @@ export async function updateTaskFollowUpStatus(
 
 export async function approveTask(
   taskId,
-  { actedByEmployeeId = null, notes = null } = {}
+  { notes = null } = {}
 ) {
   assertCanManageTaskApproval();
 
@@ -2568,7 +2552,7 @@ export async function approveTask(
 
 export async function rejectTask(
   taskId,
-  { actedByEmployeeId = null, notes = null } = {}
+  { notes = null } = {}
 ) {
   assertCanManageTaskApproval();
 
