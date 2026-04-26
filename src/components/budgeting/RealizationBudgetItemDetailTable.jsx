@@ -32,15 +32,15 @@ function getAmountCellStyle(tableBodyCellStyle, value) {
 
 function getRemarkText({ planAmount, realizationAmount }) {
   if (planAmount === 0 && realizationAmount > 0) {
-    return "Realisasi tanpa plan";
+    return "Tanpa anggaran";
   }
 
   if (realizationAmount === 0 && planAmount > 0) {
-    return "Belum terealisasi";
+    return "Belum terserap";
   }
 
   if (realizationAmount > planAmount) {
-    return "Overspending";
+    return "Overspend";
   }
 
   return "-";
@@ -204,7 +204,7 @@ export default function RealizationBudgetItemDetailTable({
                       color: "var(--text-muted)",
                     }}
                   >
-                    Belum ada item realisasi pada Sub Kegiatan ini.
+                    Belum ada data.
                   </td>
                 </tr>
               ) : null}
@@ -376,7 +376,7 @@ export default function RealizationBudgetItemDetailTable({
                                       size: "sm",
                                     })}
                                   >
-                                    Realisasi tanpa plan
+                                    Tanpa anggaran
                                   </span>
                                 ) : hasOverspendWarning ? (
                                   <span
@@ -385,7 +385,7 @@ export default function RealizationBudgetItemDetailTable({
                                       size: "sm",
                                     })}
                                   >
-                                    Overspending
+                                    Overspend
                                   </span>
                                 ) : remarkText === "-" ? (
                                   <span style={{ color: "var(--text-muted)" }}>-</span>

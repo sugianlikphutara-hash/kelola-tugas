@@ -1,4 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import ToastStack from "../ui/ToastStack";
+import { useToasts } from "../../hooks/useToasts";
 import {
   getAlertStyle,
   getChipStyle,
@@ -143,6 +145,7 @@ function SummaryCard({ prefersDarkMode, label, value }) {
 }
 
 export default function BudgetReportSection({ prefersDarkMode }) {
+  const { toasts, pushToast, dismissToast } = useToasts({ defaultDurationMs: 5000 });
   const [fiscalYearOptions, setFiscalYearOptions] = useState([]);
   const [selectedFiscalYearId, setSelectedFiscalYearId] = useState("");
   const [versionOptions, setVersionOptions] = useState([]);
@@ -164,7 +167,6 @@ export default function BudgetReportSection({ prefersDarkMode }) {
   const [expandedSubActivityIds, setExpandedSubActivityIds] = useState({});
   const [detailStateBySubActivity, setDetailStateBySubActivity] = useState({});
   const [isExporting, setIsExporting] = useState(false);
-  const [exportErrorMessage, setExportErrorMessage] = useState("");
   const requestKeyRef = useRef("");
 
   useEffect(() => {
@@ -413,6 +415,9 @@ export default function BudgetReportSection({ prefersDarkMode }) {
   }, [filteredRows]);
 
   const tableBodyCellStyle = getTableBodyCellStyle({ padding: "12px 14px" });
+  const activeStatusFilterLabel =
+    STATUS_FILTER_OPTIONS.find((option) => option.value === statusFilter)?.label ||
+    "Semua";
 
   function getDetailRowsForSubActivity(subActivityId) {
     return (reportState.detailRows || []).filter(
@@ -474,11 +479,14 @@ export default function BudgetReportSection({ prefersDarkMode }) {
 
   async function handleExportExcel() {
     if (!selectedVersion?.id) {
+      pushToast({
+        type: "error",
+        message: "Pilih versi RAK terlebih dahulu.",
+      });
       return;
     }
 
     setIsExporting(true);
-    setExportErrorMessage("");
 
     try {
       const XLSX = await import("xlsx");
@@ -538,8 +546,16 @@ export default function BudgetReportSection({ prefersDarkMode }) {
           selectedFiscalYear?.year
         )}-${getSafeFileSegment(selectedVersion?.code)}.xlsx`
       );
+
+      pushToast({
+        type: "success",
+        message: "Export Excel berhasil dibuat.",
+      });
     } catch (error) {
-      setExportErrorMessage(error?.message || "Gagal export laporan anggaran.");
+      pushToast({
+        type: "error",
+        message: error?.message || "Gagal export Excel.",
+      });
     } finally {
       setIsExporting(false);
     }
@@ -547,6 +563,12 @@ export default function BudgetReportSection({ prefersDarkMode }) {
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
+      <ToastStack
+        prefersDarkMode={prefersDarkMode}
+        toasts={toasts}
+        onDismiss={dismissToast}
+      />
+
       <div style={{ display: "grid", gap: 4 }}>
         <div style={getSectionTitleTypography()}>Laporan Anggaran</div>
         <div style={getTableCellSubtitleTypography()}>
@@ -638,12 +660,6 @@ export default function BudgetReportSection({ prefersDarkMode }) {
         {reportState.warnings.length > 0 ? (
           <div style={getAlertStyle(prefersDarkMode, { tone: "warning" })}>
             {reportState.warnings.join(" ")}
-          </div>
-        ) : null}
-
-        {exportErrorMessage ? (
-          <div style={getAlertStyle(prefersDarkMode, { tone: "error" })}>
-            {exportErrorMessage}
           </div>
         ) : null}
 
@@ -764,7 +780,12 @@ export default function BudgetReportSection({ prefersDarkMode }) {
       !reportState.errorMessage &&
       filteredRows.length === 0 ? (
         <div style={getEmptyStateStyle(prefersDarkMode)}>
-          Belum ada data laporan anggaran untuk filter ini.
+          <div>Data tidak ditemukan.</div>
+          {statusFilter !== "ALL" ? (
+            <div style={{ marginTop: 6, ...getTableCellSubtitleTypography() }}>
+              Filter status: {activeStatusFilterLabel}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -907,7 +928,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                               cursor: "pointer",
                             }}
                           >
-                            {isExpanded ? "-" : "+"}
+                            {detailState.isLoading ? "..." : isExpanded ? "-" : "+"}
                           </button>
                         </td>
                         <td style={{ ...tableBodyCellStyle, ...expandedParentCellStyle }}>
@@ -1002,7 +1023,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                             !detailState.errorMessage &&
                             detailState.rows.length === 0 ? (
                               <div style={getEmptyStateStyle(prefersDarkMode)}>
-                                Belum ada detail akun belanja.
+                                Belum ada data.
                               </div>
                             ) : null}
 

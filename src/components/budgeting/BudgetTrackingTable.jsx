@@ -286,7 +286,7 @@ export default function BudgetTrackingTable({
                           detailState.rows.length === 0 ? (
                             <div style={{ padding: 12 }}>
                               <div style={getAlertStyle(prefersDarkMode, { tone: "info" })}>
-                                Belum ada detail tracking akun untuk sub kegiatan ini.
+                                Belum ada data.
                               </div>
                             </div>
                           ) : null}
@@ -532,7 +532,7 @@ export default function BudgetTrackingTable({
                     color: "var(--text-muted)",
                   }}
                 >
-                  Belum ada data tracking anggaran untuk versi RAK yang dipilih.
+                  Belum ada data.
                 </td>
               </tr>
             ) : null}

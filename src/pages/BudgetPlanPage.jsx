@@ -1059,7 +1059,7 @@ export default function BudgetPlanPage({ forcedRakVersionId = "" }) {
         !summaryState.errorMessage &&
         summaryState.rows.length === 0 ? (
           <div style={getEmptyStateStyle(prefersDarkMode)}>
-            Belum ada data RAK yang bisa ditampilkan untuk versi ini.
+            Belum ada data.
           </div>
         ) : null}
 

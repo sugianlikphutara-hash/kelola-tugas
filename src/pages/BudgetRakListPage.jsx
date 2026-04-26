@@ -444,7 +444,7 @@ export default function BudgetRakListPage({ onOpenVersionDetail }) {
         !versionsState.errorMessage &&
         !selectedFiscalYearId ? (
           <div style={getEmptyStateStyle(prefersDarkMode)}>
-            Belum ada Tahun Anggaran yang bisa dipilih.
+            Belum ada data.
           </div>
         ) : null}
 
@@ -453,7 +453,7 @@ export default function BudgetRakListPage({ onOpenVersionDetail }) {
         selectedFiscalYearId &&
         versionsState.rows.length === 0 ? (
           <div style={getEmptyStateStyle(prefersDarkMode)}>
-            Belum ada versi RAK untuk Tahun Anggaran {selectedFiscalYear?.label || "-"}.
+            Belum ada data.
           </div>
         ) : null}
 

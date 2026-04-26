@@ -152,7 +152,7 @@ export default function BudgetWarningTable({ prefersDarkMode, rows }) {
                     color: "var(--text-muted)",
                   }}
                 >
-                  Belum ada warning anggaran untuk versi yang dipilih.
+                  Belum ada data.
                 </td>
               </tr>
             ) : null}

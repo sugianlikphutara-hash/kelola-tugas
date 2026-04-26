@@ -379,7 +379,7 @@ export default function BudgetWarningPage() {
         !warningState.errorMessage &&
         warningState.rows.length === 0 ? (
           <div style={getEmptyStateStyle(prefersDarkMode)}>
-            Belum ada warning anggaran yang bisa ditampilkan untuk versi ini.
+            Belum ada data.
           </div>
         ) : null}
 

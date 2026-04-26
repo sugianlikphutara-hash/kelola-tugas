@@ -234,7 +234,7 @@ export default function BudgetItemTable({
                       color: "var(--text-muted)",
                     }}
                   >
-                    Belum ada item anggaran pada Sub Kegiatan ini.
+                    Belum ada data.
                   </td>
                 </tr>
               ) : null}

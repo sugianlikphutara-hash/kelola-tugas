@@ -42,11 +42,11 @@ function getRemarkText(row) {
   }
 
   if (realizationAmount === 0 && planAmount > 0) {
-    return "Belum terealisasi";
+    return "Belum terserap";
   }
 
   if (realizationAmount > planAmount) {
-    return "Overspending";
+    return "Overspend";
   }
 
   return "-";
@@ -189,7 +189,7 @@ export default function RealizationSubActivityTable({
                           cursor: "pointer",
                         }}
                       >
-                        {isExpanded ? "-" : "+"}
+                        {detailState.isLoading ? "..." : isExpanded ? "-" : "+"}
                       </button>
                     </td>
                     <td style={{ ...tableBodyCellStyle, ...expandedParentCellStyle }}>
@@ -308,7 +308,7 @@ export default function RealizationSubActivityTable({
                     color: "var(--text-muted)",
                   }}
                 >
-                  Belum ada data realisasi untuk versi yang dipilih.
+                  Belum ada data.
                 </td>
               </tr>
             ) : null}

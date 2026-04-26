@@ -70,7 +70,7 @@ function toNumericAmount(value) {
 
 function getRealizationRemark({ planAmount, realizationAmount }) {
   if (realizationAmount === 0 && planAmount > 0) {
-    return "Belum terealisasi";
+    return "Belum terserap";
   }
 
   if (planAmount === 0 && realizationAmount > 0) {
@@ -78,7 +78,7 @@ function getRealizationRemark({ planAmount, realizationAmount }) {
   }
 
   if (realizationAmount > planAmount) {
-    return "Overspending";
+    return "Overspend";
   }
 
   return "-";
@@ -1550,7 +1550,7 @@ export default function BudgetRealizationPage() {
         !summaryState.errorMessage &&
         summaryState.rows.length === 0 ? (
           <div style={getEmptyStateStyle(prefersDarkMode)}>
-            Belum ada data realisasi yang bisa ditampilkan untuk konteks ini.
+            Belum ada data.
           </div>
         ) : null}
 

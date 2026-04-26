@@ -711,7 +711,7 @@ export default function BudgetDashboardPage() {
       !dashboardState.errorMessage &&
       !dashboardState.summary ? (
         <div style={getEmptyStateStyle(prefersDarkMode)}>
-          Belum ada ringkasan dashboard yang bisa ditampilkan untuk versi ini.
+          Belum ada data.
         </div>
       ) : null}
 

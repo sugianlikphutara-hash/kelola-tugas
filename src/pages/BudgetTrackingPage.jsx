@@ -839,7 +839,7 @@ export default function BudgetTrackingPage() {
         selectedFiscalYearId &&
         versionOptions.length === 0 ? (
           <div style={getEmptyStateStyle(prefersDarkMode)}>
-            Belum ada versi RAK pada tahun anggaran ini.
+            Belum ada data.
           </div>
         ) : null}
 
@@ -849,7 +849,7 @@ export default function BudgetTrackingPage() {
         trackingState.rows.length === 0 &&
         versionOptions.length > 0 ? (
           <div style={getEmptyStateStyle(prefersDarkMode)}>
-            Belum ada data tracking anggaran untuk versi RAK yang dipilih.
+            Belum ada data.
           </div>
         ) : null}
 
@@ -858,7 +858,7 @@ export default function BudgetTrackingPage() {
         trackingState.rows.length > 0 &&
         displayedRows.length === 0 ? (
           <div style={getEmptyStateStyle(prefersDarkMode)}>
-            Tidak ada Sub Kegiatan yang sesuai filter.
+            Data tidak ditemukan.
           </div>
         ) : null}
 
