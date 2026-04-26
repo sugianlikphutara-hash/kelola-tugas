@@ -922,19 +922,16 @@ export async function updateTaskDailyReportReviewStatus(
   const actorEmployeeId = getCurrentAuditEmployeeId();
   const isReviewed = normalizedReviewStatus === "reviewed";
 
-  const payload = {
-    review_status: normalizedReviewStatus,
-    review_notes: String(reviewNotes || "").trim() || null,
-    reviewed_at: isReviewed ? new Date().toISOString() : null,
-    reviewed_by_employee_id: isReviewed ? actorEmployeeId : null,
-  };
-
-  const { data, error } = await supabase
-    .from("task_daily_reports")
-    .update(payload)
-    .eq("id", reportId)
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("manage_task_daily_report", {
+    p_action: "review",
+    p_report_id: reportId,
+    p_task_id: null,
+    p_payload: {
+      review_status: normalizedReviewStatus,
+      review_notes: String(reviewNotes || "").trim() || null,
+      reviewed_by_employee_id: isReviewed ? actorEmployeeId : null,
+    },
+  });
 
   if (error) {
     console.error(error);
@@ -1959,20 +1956,18 @@ export async function createTaskDailyReport({
   }
 
   try {
-    const { data, error } = await supabase
-      .from("task_daily_reports")
-      .insert([
-        {
-          task_id: taskId,
-          report_date: reportDate,
-          work_summary: trimmedWorkSummary,
-          document_id: documentData?.id || null,
-          document_link: documentData?.id ? null : trimmedDocumentLink,
-          created_by_employee_id: actorEmployeeId,
-        },
-      ])
-      .select()
-      .single();
+    const { data, error } = await supabase.rpc("manage_task_daily_report", {
+      p_action: "create",
+      p_report_id: null,
+      p_task_id: taskId,
+      p_payload: {
+        report_date: reportDate,
+        work_summary: trimmedWorkSummary,
+        document_id: documentData?.id || null,
+        document_link: documentData?.id ? null : trimmedDocumentLink,
+        created_by_employee_id: actorEmployeeId,
+      },
+    });
 
     if (error) {
       console.error(error);
@@ -2063,18 +2058,18 @@ export async function updateTaskDailyReport(
   }
 
   try {
-    const { data, error } = await supabase
-      .from("task_daily_reports")
-      .update({
+    const { data, error } = await supabase.rpc("manage_task_daily_report", {
+      p_action: "update",
+      p_report_id: reportId,
+      p_task_id: taskId,
+      p_payload: {
         task_id: taskId,
         report_date: reportDate,
         work_summary: trimmedWorkSummary,
         document_id: nextDocumentId,
         document_link: nextDocumentLink,
-      })
-      .eq("id", reportId)
-      .select()
-      .single();
+      },
+    });
 
     if (error) {
       console.error(error);
