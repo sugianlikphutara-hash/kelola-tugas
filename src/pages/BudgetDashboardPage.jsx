@@ -586,9 +586,9 @@ export default function BudgetDashboardPage() {
   return (
     <div style={{ paddingBottom: 60, display: "grid", gap: 18 }}>
       <div style={{ display: "grid", gap: 8 }}>
-        <h1 style={getPageTitleStyle()}>DASHBOARD ANGGARAN</h1>
+        <h1 style={getPageTitleStyle()}>RINGKASAN ANGGARAN</h1>
         <div style={getPageSubtitleStyle()}>
-          Ringkasan kesehatan anggaran berbasis data tracking existing, tetap
+          Ringkasan kesehatan anggaran berbasis data monitoring existing, tetap
           read-only dan fokus pada issue yang perlu diprioritaskan.
         </div>
       </div>

@@ -504,7 +504,7 @@ export default function BudgetTrackingPage() {
   return (
     <div style={{ paddingBottom: 60, display: "grid", gap: 18 }}>
       <div style={{ display: "grid", gap: 8 }}>
-        <h1 style={getPageTitleStyle()}>BUDGET TRACKING</h1>
+        <h1 style={getPageTitleStyle()}>MONITORING ANGGARAN</h1>
         <div style={getPageSubtitleStyle()}>
           Monitoring plan versus realisasi per Sub Kegiatan untuk versi RAK yang
           dipilih, tetap read-only dan memakai data progress summary existing.
@@ -770,7 +770,7 @@ export default function BudgetTrackingPage() {
         >
           <div style={{ display: "grid", gap: 4 }}>
             <div style={getTableCellLabelTypography()}>
-              TRACKING PENYERAPAN PER SUB KEGIATAN
+              MONITORING PENYERAPAN PER SUB KEGIATAN
             </div>
             <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
               Menampilkan {displayedRows.length} dari {trackingState.rows.length} Sub

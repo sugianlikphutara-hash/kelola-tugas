@@ -1029,7 +1029,7 @@ export default function TaskPage() {
         }}
       >
         <div>
-          <h1 style={getPageTitleStyle()}>KELOLA TASK</h1>
+          <h1 style={getPageTitleStyle()}>KELOLA TUGAS</h1>
           {/*
           <div style={getPageSubtitleStyle()}>
             Pantau progress, kelola permohonan eviden, dan proses approval untuk setiap task.

@@ -240,8 +240,8 @@ function App() {
   const menus = useMemo(() => {
     const baseMenus = [
       { key: "dashboard", label: "Dashboard" },
-      { key: "task", label: "Task" },
-      { key: "tracking", label: "Tracking" },
+      { key: "task", label: "Tugas" },
+      { key: "tracking", label: "Monitoring Tugas" },
       { key: "kanban", label: "Kanban" },
       { key: "reporting", label: "Pelaporan" },
       { key: "timeline", label: "Timeline" },

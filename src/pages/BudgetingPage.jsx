@@ -4,7 +4,6 @@ import BudgetPlanPage from "./BudgetPlanPage";
 import BudgetRealizationPage from "./BudgetRealizationPage";
 import BudgetRakListPage from "./BudgetRakListPage";
 import BudgetTrackingPage from "./BudgetTrackingPage";
-import BudgetWarningPage from "./BudgetWarningPage";
 import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode";
 import {
   getOutlinedButtonStyle,
@@ -53,7 +52,7 @@ export default function BudgetingPage() {
                 })
           }
         >
-          Dashboard
+          Ringkasan Anggaran
         </button>
         <button
           type="button"
@@ -72,7 +71,7 @@ export default function BudgetingPage() {
                 })
           }
         >
-          RAK
+          Versi RAK
         </button>
         <button
           type="button"
@@ -91,7 +90,7 @@ export default function BudgetingPage() {
                 })
           }
         >
-          Rencana
+          Rencana Anggaran
         </button>
         <button
           type="button"
@@ -110,7 +109,7 @@ export default function BudgetingPage() {
                 })
           }
         >
-          Realisasi
+          Realisasi Anggaran
         </button>
         <button
           type="button"
@@ -129,26 +128,7 @@ export default function BudgetingPage() {
                 })
           }
         >
-          Tracking
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection("warning")}
-          style={
-            activeSection === "warning"
-              ? getPrimaryButtonStyle(prefersDarkMode, {
-                  isEnabled: true,
-                  height: 38,
-                  size: "sm",
-                })
-              : getOutlinedButtonStyle(prefersDarkMode, {
-                  isEnabled: true,
-                  height: 38,
-                  size: "sm",
-                })
-          }
-        >
-          Warning
+          Monitoring Anggaran
         </button>
       </section>
 
@@ -161,7 +141,6 @@ export default function BudgetingPage() {
       ) : null}
       {activeSection === "progress" ? <BudgetTrackingPage /> : null}
       {activeSection === "realization" ? <BudgetRealizationPage /> : null}
-      {activeSection === "warning" ? <BudgetWarningPage /> : null}
     </div>
   );
 }

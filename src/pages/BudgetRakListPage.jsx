@@ -323,7 +323,7 @@ export default function BudgetRakListPage({ onOpenVersionDetail }) {
       />
 
       <div style={{ display: "grid", gap: 8 }}>
-        <h1 style={getPageTitleStyle()}>DAFTAR VERSI RAK</h1>
+        <h1 style={getPageTitleStyle()}>VERSI RAK</h1>
         <div style={getPageSubtitleStyle()}>
           Daftar versi RAK per Tahun Anggaran. Halaman ini hanya menampilkan level
           versi, tanpa merender item anggaran.

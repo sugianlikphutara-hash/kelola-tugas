@@ -1403,7 +1403,7 @@ export default function TrackingPage({ onOpenTaskInTimeline }) {
           flexWrap: "wrap"
         }}
       >
-        <h1 style={{ ...getPageTitleStyle(), margin: 0 }}>TRACKING TASK</h1>
+        <h1 style={{ ...getPageTitleStyle(), margin: 0 }}>MONITORING TUGAS</h1>
         
         {/* Garis Vertikal Pemisah */}
         <div 
