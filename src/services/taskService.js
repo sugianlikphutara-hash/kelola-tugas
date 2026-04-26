@@ -2533,164 +2533,20 @@ export async function updateTaskFollowUpStatus(
   return data;
 }
 
-async function syncTaskApprovalAudit({
-  taskId,
-  approvalStatus,
-  actedByEmployeeId = null,
-  notes = null,
-}) {
-  const actorEmployeeId = resolveAuditEmployeeId(actedByEmployeeId);
-  const normalizedApprovalStatus = String(approvalStatus || "").trim().toLowerCase();
-  const actionAt = new Date().toISOString();
-
-  const { data: existingApproval, error: approvalLookupError } = await supabase
-    .from("approvals")
-    .select("id, entity_id, entity_type, request_by_employee_id, requested_at")
-    .eq("entity_type", "task")
-    .eq("entity_id", taskId)
-    .maybeSingle();
-
-  if (approvalLookupError) {
-    console.error(approvalLookupError);
-    throw approvalLookupError;
-  }
-
-  const approvalPayload = {
-    entity_type: "task",
-    entity_id: taskId,
-    approval_notes: notes,
-    approver_employee_id: actorEmployeeId,
-    approved_at:
-      normalizedApprovalStatus === "approved" ? actionAt : null,
-    rejected_at:
-      normalizedApprovalStatus === "rejected" ? actionAt : null,
-    request_by_employee_id: existingApproval?.request_by_employee_id ?? null,
-    requested_at: existingApproval?.requested_at ?? actionAt,
-  };
-
-  let approvalRecord = existingApproval;
-
-  if (existingApproval?.id) {
-    const { data, error } = await supabase
-      .from("approvals")
-      .update(approvalPayload)
-      .eq("id", existingApproval.id)
-      .select("id, entity_id, entity_type, request_by_employee_id, requested_at")
-      .single();
-
-    if (error) {
-      console.error(error);
-      throw error;
-    }
-
-    approvalRecord = data;
-  } else {
-    const { data, error } = await supabase
-      .from("approvals")
-      .insert([approvalPayload])
-      .select("id, entity_id, entity_type, request_by_employee_id, requested_at")
-      .single();
-
-    if (error) {
-      console.error(error);
-      throw error;
-    }
-
-    approvalRecord = data;
-  }
-
-  const { error: approvalHistoryError } = await supabase
-    .from("approval_histories")
-    .insert([
-      {
-        approval_id: approvalRecord.id,
-        action_name: normalizedApprovalStatus,
-        action_at: actionAt,
-        action_by_employee_id: actorEmployeeId,
-        notes,
-      },
-    ]);
-
-  if (approvalHistoryError) {
-    console.error(approvalHistoryError);
-    throw approvalHistoryError;
-  }
-
-  return approvalRecord;
-}
-
-async function getTaskApprovalAuditSnapshot(taskId) {
-  const { data, error } = await supabase
-    .from("approvals")
-    .select(
-      "id, approval_level, approval_notes, approved_at, approver_employee_id, created_at, entity_id, entity_type, rejected_at, request_by_employee_id, requested_at, status_id, updated_at"
-    )
-    .eq("entity_type", "task")
-    .eq("entity_id", taskId)
-    .maybeSingle();
-
-  if (error) {
-    console.error(error);
-    throw error;
-  }
-
-  return data || null;
-}
-
-async function restoreTaskApprovalAuditSnapshot(taskId, snapshot) {
-  if (!snapshot?.id) {
-    const { error } = await supabase
-      .from("approvals")
-      .delete()
-      .eq("entity_type", "task")
-      .eq("entity_id", taskId);
-
-    if (error) {
-      console.error(error);
-      throw error;
-    }
-
-    return null;
-  }
-
-  const { error } = await supabase
-    .from("approvals")
-    .upsert([snapshot], {
-      onConflict: "id",
-    });
-
-  if (error) {
-    console.error(error);
-    throw error;
-  }
-
-  return snapshot;
-}
-
 export async function approveTask(
   taskId,
   { actedByEmployeeId = null, notes = null } = {}
 ) {
   assertCanManageTaskApproval();
-  const { data: currentTask, error: currentTaskError } = await supabase
-    .from("tasks")
-    .select("id, status_id, approval_status")
-    .eq("id", taskId)
-    .single();
 
-  if (currentTaskError) {
-    console.error(currentTaskError);
-    throw currentTaskError;
-  }
-
-  const approvalAuditSnapshot = await getTaskApprovalAuditSnapshot(taskId);
-
-  const { data, error } = await supabase
-    .from("tasks")
-    .update({ approval_status: "approved" })
-    .eq("id", taskId)
-    .select()
-    .single();
+  const { data: updatedTask, error } = await supabase.rpc(
+    "set_task_approval_status",
+    {
+      p_task_id: taskId,
+      p_approval_status: "approved",
+      p_notes: String(notes || "").trim() || null,
+    }
+  );
 
   if (error) {
     console.error(error);
@@ -2698,33 +2554,16 @@ export async function approveTask(
   }
 
   try {
-    await syncTaskKanbanCard(data.id, data.status_id, data.approval_status);
-    await syncTaskApprovalAudit({
-      taskId,
-      approvalStatus: "approved",
-      actedByEmployeeId,
-      notes: String(notes || "").trim() || null,
-    });
+    await syncTaskKanbanCard(
+      updatedTask.id,
+      updatedTask.status_id,
+      updatedTask.approval_status
+    );
   } catch (syncError) {
-    try {
-      await supabase
-        .from("tasks")
-        .update({ approval_status: currentTask.approval_status })
-        .eq("id", taskId);
-      await syncTaskKanbanCard(
-        taskId,
-        currentTask.status_id,
-        currentTask.approval_status
-      );
-      await restoreTaskApprovalAuditSnapshot(taskId, approvalAuditSnapshot);
-    } catch (rollbackError) {
-      console.error("Rollback approve task audit gagal", rollbackError);
-    }
-
-    throw syncError;
+    console.error("Gagal sinkronisasi Kanban paska approve", syncError);
   }
 
-  return data;
+  return updatedTask;
 }
 
 export async function rejectTask(
@@ -2732,25 +2571,15 @@ export async function rejectTask(
   { actedByEmployeeId = null, notes = null } = {}
 ) {
   assertCanManageTaskApproval();
-  const { data: currentTask, error: currentTaskError } = await supabase
-    .from("tasks")
-    .select("id, status_id, approval_status")
-    .eq("id", taskId)
-    .single();
 
-  if (currentTaskError) {
-    console.error(currentTaskError);
-    throw currentTaskError;
-  }
-
-  const approvalAuditSnapshot = await getTaskApprovalAuditSnapshot(taskId);
-
-  const { data, error } = await supabase
-    .from("tasks")
-    .update({ approval_status: "rejected" })
-    .eq("id", taskId)
-    .select()
-    .single();
+  const { data: updatedTask, error } = await supabase.rpc(
+    "set_task_approval_status",
+    {
+      p_task_id: taskId,
+      p_approval_status: "rejected",
+      p_notes: String(notes || "").trim() || null,
+    }
+  );
 
   if (error) {
     console.error(error);
@@ -2758,31 +2587,14 @@ export async function rejectTask(
   }
 
   try {
-    await syncTaskKanbanCard(data.id, data.status_id, data.approval_status);
-    await syncTaskApprovalAudit({
-      taskId,
-      approvalStatus: "rejected",
-      actedByEmployeeId,
-      notes,
-    });
+    await syncTaskKanbanCard(
+      updatedTask.id,
+      updatedTask.status_id,
+      updatedTask.approval_status
+    );
   } catch (syncError) {
-    try {
-      await supabase
-        .from("tasks")
-        .update({ approval_status: currentTask.approval_status })
-        .eq("id", taskId);
-      await syncTaskKanbanCard(
-        taskId,
-        currentTask.status_id,
-        currentTask.approval_status
-      );
-      await restoreTaskApprovalAuditSnapshot(taskId, approvalAuditSnapshot);
-    } catch (rollbackError) {
-      console.error("Rollback reject task audit gagal", rollbackError);
-    }
-
-    throw syncError;
+    console.error("Gagal sinkronisasi Kanban paska reject", syncError);
   }
 
-  return data;
+  return updatedTask;
 }
