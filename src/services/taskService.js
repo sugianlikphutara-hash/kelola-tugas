@@ -1667,21 +1667,20 @@ export async function uploadTaskEvidence({
 
     documentData = insertedDocumentData;
 
-    const { data: taskDocumentData, error: taskDocumentError } = await supabase
-      .from("task_documents")
-      .insert([
-        {
-          task_id: taskId,
-          document_id: documentData.id,
-        },
-      ])
-      .select()
-      .single();
+    const { data: rpcData, error: taskDocumentError } = await supabase.rpc(
+      "create_task_progress_with_evidence",
+      {
+        p_task_id: taskId,
+        p_payload: { document_id: documentData.id },
+      }
+    );
 
     if (taskDocumentError) {
       console.error(taskDocumentError);
       throw taskDocumentError;
     }
+
+    const taskDocumentData = { id: rpcData?.task_document_id, task_id: taskId, document_id: documentData.id };
 
     return {
       document: {
@@ -2094,20 +2093,10 @@ async function syncTaskProgress(taskId, progressPercent) {
   }
 }
 
-async function deleteTaskProgressReportById(reportId) {
-  const { error } = await supabase
-    .from("task_progress_reports")
-    .delete()
-    .eq("id", reportId);
 
-  if (error) {
-    console.error(error);
-    throw error;
-  }
-}
 
 export async function createTaskProgressReport(payload) {
-  const currentTask = await validateTaskProgressSubmission(
+  await validateTaskProgressSubmission(
     payload.task_id,
     payload.progress_percent
   );
@@ -2116,48 +2105,29 @@ export async function createTaskProgressReport(payload) {
   );
   await assertCanCreateTaskProgress(payload.task_id, reportedByEmployeeId);
 
-  const { data, error } = await supabase
-    .from("task_progress_reports")
-    .insert([
-      {
-        task_id: payload.task_id,
-        report_date: payload.report_date,
-        progress_percent: payload.progress_percent,
-        result_summary: payload.result_summary,
-        issue_summary: payload.issue_summary,
-        next_step_summary: payload.next_step_summary,
-        reported_by_employee_id: reportedByEmployeeId,
-      },
-    ])
-    .select()
-    .single();
+  const progressPayload = {
+    progress_percent: payload.progress_percent,
+    report_date: payload.report_date,
+    result_summary: payload.result_summary,
+    issue_summary: payload.issue_summary,
+    next_step_summary: payload.next_step_summary,
+    reported_by_employee_id: reportedByEmployeeId,
+  };
+
+  const { data: rpcData, error } = await supabase.rpc(
+    "create_task_progress_with_evidence",
+    {
+      p_task_id: payload.task_id,
+      p_payload: progressPayload,
+    }
+  );
 
   if (error) {
     console.error(error);
     throw error;
   }
 
-  try {
-    const latestReport = await getLatestTaskProgressReport(payload.task_id);
-    await syncTaskProgress(
-      payload.task_id,
-      Number(latestReport?.progress_percent ?? currentTask?.progress_percent ?? 0)
-    );
-  } catch (syncError) {
-    try {
-      await deleteTaskProgressReportById(data.id);
-      await syncTaskProgress(
-        payload.task_id,
-        Number(currentTask?.progress_percent || 0)
-      );
-    } catch (rollbackError) {
-      console.error("Rollback create progress report gagal", rollbackError);
-    }
-
-    throw syncError;
-  }
-
-  return data;
+  return { id: rpcData?.progress_report_id, task_id: payload.task_id, ...progressPayload };
 }
 
 export async function createTaskDailyReport({
