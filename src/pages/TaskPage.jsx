@@ -23,6 +23,7 @@ import {
   updateTaskWithRelations,
 } from "../services/taskService";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
+import ConfirmActionModal from "../components/ui/ConfirmActionModal";
 import { getCompactText } from "../lib/text";
 import {
   getAlertStyle,
@@ -282,6 +283,7 @@ export default function TaskPage() {
     message: "",
     reason: "",
   });
+  const [deleteConfirmTaskId, setDeleteConfirmTaskId] = useState(null);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [approvalFilter, setApprovalFilter] = useState("all");
   const [assigneeFilter, setAssigneeFilter] = useState("ALL");
@@ -578,7 +580,7 @@ export default function TaskPage() {
     }
   }
 
-  async function handleDeleteTask(taskId) {
+  function requestDeleteTask(taskId) {
     if (!canRemoveTask) {
       setMessage("");
       setErrorMessage("Anda tidak memiliki izin untuk menghapus task.");
@@ -586,13 +588,16 @@ export default function TaskPage() {
       return;
     }
 
-    const confirmed = window.confirm("Yakin ingin menghapus task ini?");
     setOpenActionMenuTaskId(null);
+    setDeleteConfirmTaskId(taskId);
+  }
 
-    if (!confirmed) {
+  async function handleConfirmDeleteTask() {
+    if (!deleteConfirmTaskId) {
       return;
     }
 
+    const taskId = deleteConfirmTaskId;
     setMessage("");
     setErrorMessage("");
     setProcessingTaskId(taskId);
@@ -610,6 +615,7 @@ export default function TaskPage() {
       setErrorMessage(error.message || "Gagal menghapus task.");
     } finally {
       setProcessingTaskId(null);
+      setDeleteConfirmTaskId(null);
     }
   }
 
@@ -1624,7 +1630,7 @@ export default function TaskPage() {
                                       {canRemoveTask ? (
                                         <button
                                           type="button"
-                                          onClick={() => handleDeleteTask(task.task_id)}
+                                          onClick={() => requestDeleteTask(task.task_id)}
                                           disabled={processingTaskId === task.task_id}
                                           style={{
                                             ...getMenuItemButtonStyle(prefersDarkMode, {
@@ -1698,6 +1704,20 @@ export default function TaskPage() {
           onTaskUpdated={loadTasks}
         />
       ) : null}
+
+      <ConfirmActionModal
+        open={Boolean(deleteConfirmTaskId)}
+        title="Hapus Task"
+        message="Task ini akan dihapus jika belum memiliki riwayat kerja. Lanjutkan?"
+        confirmText="Hapus"
+        cancelText="Batal"
+        onCancel={() => {
+          if (!processingTaskId) {
+            setDeleteConfirmTaskId(null);
+          }
+        }}
+        onConfirm={handleConfirmDeleteTask}
+      />
 
       {confirmDialog.open ? (
         <div style={modalOverlayStyle}>

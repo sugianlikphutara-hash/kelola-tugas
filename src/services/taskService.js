@@ -1631,96 +1631,30 @@ export async function deleteTaskEvidence(taskId, documentId) {
     throw new Error("Anda tidak memiliki izin untuk menghapus eviden.");
   }
 
-  const { data: taskDocumentData, error: taskDocumentError } = await supabase
-    .from("task_documents")
-    .select("id, task_id, document_id")
-    .eq("task_id", taskId)
-    .eq("document_id", documentId)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("delete_task_evidence_safe", {
+    p_task_id: taskId,
+    p_document_id: documentId,
+  });
 
-  if (taskDocumentError) {
-    console.error(taskDocumentError);
-    throw new Error("Gagal mengambil relasi eviden task.");
+  if (error) {
+    console.error(error);
+    throw error;
   }
 
-  if (!taskDocumentData?.id) {
-    throw new Error("Relasi eviden task tidak ditemukan.");
-  }
-
-  const { data: documentData, error: documentError } = await supabase
-    .from("documents")
-    .select("id, file_url, storage_path")
-    .eq("id", documentId)
-    .single();
-
-  if (documentError) {
-    console.error(documentError);
-    throw new Error("Metadata eviden tidak ditemukan.");
-  }
-
-  const { error: deleteTaskDocumentError } = await supabase
-    .from("task_documents")
-    .delete()
-    .eq("id", taskDocumentData.id);
-
-  if (deleteTaskDocumentError) {
-    console.error(deleteTaskDocumentError);
-    throw new Error("Gagal menghapus relasi eviden task.");
-  }
-
-  const { error: deleteDocumentError } = await supabase
-    .from("documents")
-    .delete()
-    .eq("id", documentId);
-
-  if (deleteDocumentError) {
-    console.error(deleteDocumentError);
-    throw new Error("Gagal menghapus metadata eviden.");
-  }
-
-  if (documentData?.storage_path) {
+  if (data?.document_deleted && data?.storage_path) {
     const { error: storageError } = await supabase.storage
       .from(TASK_EVIDENCE_BUCKET)
-      .remove([documentData.storage_path]);
+      .remove([data.storage_path]);
 
     if (storageError) {
       console.error(storageError);
-
-      try {
-        const { error: restoreDocumentError } = await supabase
-          .from("documents")
-          .insert([
-            {
-              ...documentData,
-            },
-          ]);
-
-        if (restoreDocumentError) {
-          throw restoreDocumentError;
-        }
-
-        const { error: restoreTaskDocumentError } = await supabase
-          .from("task_documents")
-          .insert([
-            {
-              ...taskDocumentData,
-            },
-          ]);
-
-        if (restoreTaskDocumentError) {
-          throw restoreTaskDocumentError;
-        }
-      } catch (rollbackError) {
-        console.error("Rollback delete eviden gagal", rollbackError);
-      }
-
       throw new Error(`Gagal menghapus file eviden: ${storageError.message}`);
     }
   }
 
   return {
-    taskDocumentId: taskDocumentData.id,
-    documentId,
+    taskDocumentId: data?.task_document_id || null,
+    documentId: data?.document_id || documentId,
   };
 }
 
