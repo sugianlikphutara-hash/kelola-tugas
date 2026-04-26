@@ -1483,90 +1483,7 @@ export async function createTaskAssignment(taskId, employeeId) {
   return data;
 }
 
-function splitEvidenceRequests(evidenceRequest) {
-  return String(evidenceRequest || "")
-    .split(/\r?\n/)
-    .map((item) => item.replace(/^\s*-\s*/, "").trim())
-    .filter(Boolean);
-}
 
-async function setTaskAssignments(taskId, assignments = []) {
-  const { error: deleteAssignmentError } = await supabase
-    .from("task_assignments")
-    .delete()
-    .eq("task_id", taskId);
-
-  if (deleteAssignmentError) {
-    console.error(deleteAssignmentError);
-    throw deleteAssignmentError;
-  }
-
-  if (assignments.length === 0) {
-    return;
-  }
-
-  const { error: insertAssignmentError } = await supabase
-    .from("task_assignments")
-    .insert(
-      assignments.map((assignment) => ({
-        task_id: taskId,
-        employee_id: assignment.employee_id,
-        assignment_role: assignment.assignment_role ?? "Pelaksana",
-        is_primary: Boolean(assignment.is_primary),
-      }))
-    );
-
-  if (insertAssignmentError) {
-    console.error(insertAssignmentError);
-    throw insertAssignmentError;
-  }
-}
-
-async function replaceTaskAssignments(taskId, assigneeId) {
-  if (!assigneeId) {
-    return setTaskAssignments(taskId, []);
-  }
-
-  return setTaskAssignments(taskId, [
-    {
-      employee_id: assigneeId,
-      assignment_role: "Pelaksana",
-      is_primary: true,
-    },
-  ]);
-}
-
-async function replaceTaskEvidenceRequests(taskId, evidenceRequest) {
-  const { error: deleteEvidenceRequestError } = await supabase
-    .from("task_evidence_requests")
-    .delete()
-    .eq("task_id", taskId);
-
-  if (deleteEvidenceRequestError) {
-    console.error(deleteEvidenceRequestError);
-    throw deleteEvidenceRequestError;
-  }
-
-  const evidenceRequests = splitEvidenceRequests(evidenceRequest);
-  if (evidenceRequests.length === 0) {
-    return;
-  }
-
-  const { error: insertEvidenceRequestError } = await supabase
-    .from("task_evidence_requests")
-    .insert(
-      evidenceRequests.map((requestName) => ({
-        task_id: taskId,
-        request_name: requestName,
-        notes: null,
-      }))
-    );
-
-  if (insertEvidenceRequestError) {
-    console.error(insertEvidenceRequestError);
-    throw insertEvidenceRequestError;
-  }
-}
 
 export async function createTaskWithRelations(payload) {
   assertCanCreateTask();
@@ -1598,117 +1515,44 @@ export async function createTaskWithRelations(payload) {
 
 export async function updateTaskWithRelations(taskId, payload) {
   assertCanManageTask();
-  const [
-    { data: currentTask, error: currentTaskError },
-    { data: currentAssignments, error: currentAssignmentsError },
-    { data: currentEvidenceRequests, error: currentEvidenceRequestsError },
-  ] = await Promise.all([
-    supabase
-      .from("tasks")
-      .select(
-        "id, action_plan_id, title, description, start_date, due_date, status_id, priority_id, approval_status"
-      )
-      .eq("id", taskId)
-      .single(),
-    supabase
-      .from("task_assignments")
-      .select("employee_id, assignment_role, is_primary")
-      .eq("task_id", taskId),
-    supabase
-      .from("task_evidence_requests")
-      .select("request_name")
-      .eq("task_id", taskId),
-  ]);
+  const { data: currentTask, error: currentTaskError } = await supabase
+    .from("tasks")
+    .select("status_id, approval_status")
+    .eq("id", taskId)
+    .single();
 
   if (currentTaskError) {
     console.error(currentTaskError);
     throw currentTaskError;
   }
 
-  if (currentAssignmentsError) {
-    console.error(currentAssignmentsError);
-    throw currentAssignmentsError;
+
+  const { data: updatedTask, error: taskError } = await supabase.rpc(
+    "update_task_with_relations",
+    {
+      p_task_id: taskId,
+      p_payload: payload,
+    }
+  );
+
+  if (taskError) {
+    console.error("RPC update_task_with_relations gagal:", taskError);
+    throw taskError;
   }
 
-  if (currentEvidenceRequestsError) {
-    console.error(currentEvidenceRequestsError);
-    throw currentEvidenceRequestsError;
+  // sync kanban card only if needed
+  if (
+    currentTask.status_id !== payload.status_id ||
+    currentTask.approval_status === "approved"
+  ) {
+    await syncTaskKanbanCard(
+      taskId,
+      updatedTask.status_id,
+      updatedTask.approval_status
+    );
   }
 
-  const previousAssignments = (currentAssignments || []).map((item) => ({
-    employee_id: item.employee_id,
-    assignment_role: item.assignment_role,
-    is_primary: item.is_primary,
-  }));
-  const previousEvidenceRequest = (currentEvidenceRequests || [])
-    .map((item) => item.request_name)
-    .filter(Boolean)
-    .join("\n");
-
-  try {
-    const { data: updatedTask, error: taskError } = await supabase
-      .from("tasks")
-      .update({
-        action_plan_id: payload.action_plan_id,
-        title: payload.title,
-        description: payload.description,
-        start_date: payload.start_date,
-        due_date: payload.due_date,
-        status_id: payload.status_id,
-        priority_id: payload.priority_id,
-      })
-      .eq("id", taskId)
-      .select()
-      .single();
-
-    if (taskError) {
-      console.error(taskError);
-      throw taskError;
-    }
-
-    await replaceTaskAssignments(taskId, payload.assignee_id);
-    await replaceTaskEvidenceRequests(taskId, payload.evidence_request);
-
-    if (
-      currentTask.status_id !== payload.status_id ||
-      currentTask.approval_status === "approved"
-    ) {
-      await syncTaskKanbanCard(
-        taskId,
-        updatedTask.status_id,
-        updatedTask.approval_status
-      );
-    }
-
-    return updatedTask;
-  } catch (error) {
-    try {
-      await supabase
-        .from("tasks")
-        .update({
-          action_plan_id: currentTask.action_plan_id,
-          title: currentTask.title,
-          description: currentTask.description,
-          start_date: currentTask.start_date,
-          due_date: currentTask.due_date,
-          status_id: currentTask.status_id,
-          priority_id: currentTask.priority_id,
-        })
-        .eq("id", taskId);
-
-      await setTaskAssignments(taskId, previousAssignments);
-      await replaceTaskEvidenceRequests(taskId, previousEvidenceRequest);
-      await syncTaskKanbanCard(
-        taskId,
-        currentTask.status_id,
-        currentTask.approval_status
-      );
-    } catch (rollbackError) {
-      console.error("Rollback update task gagal", rollbackError);
-    }
-
-    throw error;
-  }
+  return updatedTask;
 }
 
 export async function createTaskFollowUp(payload) {
