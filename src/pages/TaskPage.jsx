@@ -3,6 +3,7 @@ import { useAuth } from "../hooks/useAuth";
 import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode";
 import {
   canCreateTask,
+  canDeleteTask,
   canEditTask,
   canManageTaskApproval,
 } from "../lib/authorization";
@@ -302,6 +303,7 @@ export default function TaskPage() {
   );
   const canAddTask = canCreateTask(auth.roleCode);
   const canUpdateTask = canEditTask(auth.roleCode);
+  const canRemoveTask = canDeleteTask(auth.roleCode);
   const canApproveOrRejectTask = canManageTaskApproval(auth.roleCode);
 
   const loadTasks = useCallback(async () => {
@@ -577,7 +579,7 @@ export default function TaskPage() {
   }
 
   async function handleDeleteTask(taskId) {
-    if (!canUpdateTask) {
+    if (!canRemoveTask) {
       setMessage("");
       setErrorMessage("Anda tidak memiliki izin untuk menghapus task.");
       setOpenActionMenuTaskId(null);
@@ -1308,7 +1310,7 @@ export default function TaskPage() {
                 const isRejectedTask =
                   String(task.approval_status || "").toLowerCase() === "rejected";
                 const canShowActionMenu = !isRejectedTask;
-                const hasTaskActions = canUpdateTask;
+                const hasTaskActions = canUpdateTask || canRemoveTask;
 
                 return (
                   <Fragment key={task.task_id}>
@@ -1619,25 +1621,27 @@ export default function TaskPage() {
                                       >
                                         Edit Task
                                       </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteTask(task.task_id)}
-                                        disabled={processingTaskId === task.task_id}
-                                        style={{
-                                          ...getMenuItemButtonStyle(prefersDarkMode, {
-                                            isEnabled: processingTaskId !== task.task_id,
-                                            tone: "danger",
-                                          }),
-                                          cursor:
-                                            processingTaskId === task.task_id
-                                              ? "wait"
-                                              : "pointer",
-                                        }}
-                                      >
-                                        {processingTaskId === task.task_id
-                                          ? "Menghapus..."
-                                          : "Hapus Task"}
-                                      </button>
+                                      {canRemoveTask ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteTask(task.task_id)}
+                                          disabled={processingTaskId === task.task_id}
+                                          style={{
+                                            ...getMenuItemButtonStyle(prefersDarkMode, {
+                                              isEnabled: processingTaskId !== task.task_id,
+                                              tone: "danger",
+                                            }),
+                                            cursor:
+                                              processingTaskId === task.task_id
+                                                ? "wait"
+                                                : "pointer",
+                                          }}
+                                        >
+                                          {processingTaskId === task.task_id
+                                            ? "Menghapus..."
+                                            : "Hapus Task"}
+                                        </button>
+                                      ) : null}
                                     </>
                                   ) : (
                                       <div

@@ -107,6 +107,10 @@ function canManageTaskByRole(roleCode) {
   return ["ADMIN", "KASI", "KASUBAG"].includes(normalizeRoleCode(roleCode));
 }
 
+function canDeleteTaskByRole(roleCode) {
+  return normalizeRoleCode(roleCode) === "ADMIN";
+}
+
 function normalizeWorkflowCode(value) {
   return String(value || "")
     .trim()
@@ -1058,7 +1062,7 @@ export async function getTaskKanbanCards() {
   return data || [];
 }
 
-export async function updateTaskKanbanCardPosition(cardId, columnId, sortOrder) {
+async function updateTaskKanbanCardPosition(cardId, columnId, sortOrder) {
   const { data, error } = await supabase
     .from("kanban_cards")
     .update({
@@ -1077,7 +1081,7 @@ export async function updateTaskKanbanCardPosition(cardId, columnId, sortOrder) 
   return data;
 }
 
-export async function syncTaskStatusWithKanbanColumn(taskId, columnId) {
+async function syncTaskStatusWithKanbanColumn(taskId, columnId) {
   const { data: columnData, error: columnError } = await supabase
     .from("kanban_columns")
     .select("id, code")
@@ -1380,116 +1384,21 @@ async function syncTaskKanbanCard(taskId, statusId, approvalStatus) {
 
   return data;
 }
-function generateTaskCode() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const hours = String(now.getHours()).padStart(2, "0");
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  const seconds = String(now.getSeconds()).padStart(2, "0");
-  const milliseconds = String(now.getMilliseconds()).padStart(3, "0");
-  const randomSuffix = Math.random().toString(36).slice(2, 6).toUpperCase();
-
-  return `TSK-${year}${month}${day}-${hours}${minutes}${seconds}${milliseconds}-${randomSuffix}`;
-}
-
-function isDuplicateTaskCodeError(error) {
-  const errorCode = String(error?.code || "").trim();
-  const errorMessage = String(error?.message || "").toLowerCase();
-
-  return (
-    errorCode === "23505" ||
-    errorMessage.includes("duplicate") ||
-    errorMessage.includes("unique")
-  );
-}
-
-function resolveInitialApprovalStatus(approvalStatus) {
-  const normalizedApprovalStatus = String(approvalStatus || "")
-    .trim()
-    .toLowerCase();
-
-  if (normalizedApprovalStatus === "approved") {
-    return "approved";
-  }
-
-  return "pending";
-}
-
-export async function createTask(taskPayload) {
-  const approvalStatus = resolveInitialApprovalStatus(
-    taskPayload?.approval_status
-  );
-  const maxCreateAttempts = 3;
-
-  for (let attempt = 1; attempt <= maxCreateAttempts; attempt += 1) {
-    const generatedCode = generateTaskCode();
-
-    const { data, error } = await supabase
-      .from("tasks")
-      .insert([
-        {
-          ...taskPayload,
-          code: generatedCode,
-          approval_status: approvalStatus,
-        },
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      if (attempt < maxCreateAttempts && isDuplicateTaskCodeError(error)) {
-        continue;
-      }
-
-      console.error(error);
-      throw error;
-    }
-
-    await syncTaskKanbanCard(data.id, data.status_id, data.approval_status);
-
-    return data;
-  }
-
-  throw new Error("Gagal membuat kode task yang unik.");
-}
-
 export async function deleteTask(taskId) {
-  assertCanManageTask();
-  await removeTaskKanbanCard(taskId);
+  const roleCode = getCurrentAuthenticatedRoleCode();
+  if (!canDeleteTaskByRole(roleCode)) {
+    throw new Error("Hanya ADMIN yang boleh menghapus task.");
+  }
 
-  const { error } = await supabase.from("tasks").delete().eq("id", taskId);
+  const { error } = await supabase.rpc("delete_task_safe", {
+    p_task_id: taskId,
+  });
 
   if (error) {
     console.error(error);
     throw error;
   }
 }
-
-export async function createTaskAssignment(taskId, employeeId) {
-  const { data, error } = await supabase
-    .from("task_assignments")
-    .insert([
-      {
-        task_id: taskId,
-        employee_id: employeeId,
-        assignment_role: "Pelaksana",
-        is_primary: true,
-      },
-    ])
-    .select()
-    .single();
-
-  if (error) {
-    console.error(error);
-    throw error;
-  }
-
-  return data;
-}
-
-
 
 export async function createTaskWithRelations(payload) {
   assertCanCreateTask();
@@ -2454,38 +2363,6 @@ export async function deleteTaskProgressReport(reportId) {
     id: currentReport.id,
     task_id: currentReport.task_id,
   };
-}
-
-export async function updateTaskStatus(taskId, statusId) {
-  const { data, error } = await supabase
-    .from("tasks")
-    .update({ status_id: statusId })
-    .eq("id", taskId)
-    .select()
-    .single();
-
-  if (error) {
-    console.error(error);
-    throw error;
-  }
-
-  return data;
-}
-
-export async function updateTaskNotes(taskId, notes) {
-  const { data, error } = await supabase
-    .from("tasks")
-    .update({ notes })
-    .eq("id", taskId)
-    .select()
-    .single();
-
-  if (error) {
-    console.error(error);
-    throw error;
-  }
-
-  return data;
 }
 
 export async function updateTaskFollowUpStatus(

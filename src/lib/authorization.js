@@ -78,6 +78,10 @@ export function canEditTask(roleCode) {
   ].includes(normalizedRoleCode);
 }
 
+export function canDeleteTask(roleCode) {
+  return isAdminRole(roleCode);
+}
+
 export function canManageTaskApproval(roleCode) {
   const normalizedRoleCode = normalizeRoleCode(roleCode);
 
