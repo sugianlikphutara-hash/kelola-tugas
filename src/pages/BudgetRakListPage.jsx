@@ -457,7 +457,7 @@ export default function BudgetRakListPage({ onOpenVersionDetail }) {
         !versionsState.errorMessage &&
         versionsState.rows.length > 0 ? (
           <div style={{ overflowX: "auto" }}>
-            <div style={getTableFrameStyle({ borderRadius: 12 })}>
+            <div style={getTableFrameStyle({ borderRadius: 0 })}>
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1180 }}>
                 <thead>
                   <tr>

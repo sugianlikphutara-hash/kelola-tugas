@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ToastStack from "../components/ui/ToastStack";
 import ConfirmActionModal from "../components/ui/ConfirmActionModal";
+import RealizationAuditLogModal from "../components/budgeting/RealizationAuditLogModal";
 import RealizationSubActivityTable from "../components/budgeting/RealizationSubActivityTable";
+import { useAuth } from "../hooks/useAuth";
 import { useToasts } from "../hooks/useToasts";
 import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode";
+import { isAdminRole } from "../lib/authorization";
 import {
   getAlertStyle,
   getChipStyle,
@@ -21,8 +24,12 @@ import {
 import { getBudgetYears } from "../services/masterDataService";
 import {
   getDefaultBudgetRealizationStatus,
+  getBudgetPeriodLockStatus,
+  getBudgetRealizationAuditLogs,
   getRealizationBudgetItemDetail,
+  getRealizationExportRows,
   getRealizationSubActivitySummary,
+  setBudgetPeriodLock,
   saveMonthlyBudgetRealization,
 } from "../services/budgetRealizationService";
 import {
@@ -56,6 +63,30 @@ function formatCurrency(value) {
 function toNumericAmount(value) {
   const nextValue = Number(value ?? 0);
   return Number.isFinite(nextValue) ? nextValue : 0;
+}
+
+function getRealizationRemark({ planAmount, realizationAmount }) {
+  if (realizationAmount === 0 && planAmount > 0) {
+    return "Belum terealisasi";
+  }
+
+  if (planAmount === 0 && realizationAmount > 0) {
+    return "Realisasi tanpa plan";
+  }
+
+  if (realizationAmount > planAmount) {
+    return "Overspending";
+  }
+
+  return "-";
+}
+
+function getSafeFileSegment(value) {
+  return String(value || "-")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
 }
 
 function getVersionStatusTone(status) {
@@ -141,6 +172,7 @@ function ChevronRightIcon() {
 }
 
 export default function BudgetRealizationPage() {
+  const auth = useAuth();
   const prefersDarkMode = usePrefersDarkMode();
   const { toasts, pushToast, dismissToast } = useToasts({ defaultDurationMs: 5000 });
   const [fiscalYearOptions, setFiscalYearOptions] = useState([]);
@@ -165,6 +197,20 @@ export default function BudgetRealizationPage() {
   const [draftValuesByDetailKey, setDraftValuesByDetailKey] = useState({});
   const [rowMutationStateByDetailKey, setRowMutationStateByDetailKey] = useState({});
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
+  const [historyModalState, setHistoryModalState] = useState({
+    isOpen: false,
+    context: null,
+    rows: [],
+    isLoading: false,
+    errorMessage: "",
+  });
+  const [periodLockState, setPeriodLockState] = useState({
+    isLocked: false,
+    isLoading: false,
+    isMutating: false,
+    errorMessage: "",
+  });
+  const [isExporting, setIsExporting] = useState(false);
   const selectedRakVersionIdRef = useRef("");
   const selectedFiscalYearIdRef = useRef("");
   const selectedPeriodMonthRef = useRef(selectedPeriodMonth);
@@ -299,6 +345,68 @@ export default function BudgetRealizationPage() {
   useEffect(() => {
     let isMounted = true;
 
+    async function loadPeriodLockStatus() {
+      if (!selectedFiscalYearId || !selectedPeriodMonth) {
+        setPeriodLockState({
+          isLocked: false,
+          isLoading: false,
+          isMutating: false,
+          errorMessage: "",
+        });
+        return;
+      }
+
+      setPeriodLockState((currentState) => ({
+        ...currentState,
+        isLoading: true,
+        errorMessage: "",
+      }));
+
+      try {
+        const result = await getBudgetPeriodLockStatus(
+          selectedFiscalYearId,
+          selectedPeriodMonth
+        );
+
+        if (
+          !isMounted ||
+          selectedFiscalYearIdRef.current !== selectedFiscalYearId ||
+          selectedPeriodMonthRef.current !== selectedPeriodMonth
+        ) {
+          return;
+        }
+
+        setPeriodLockState({
+          isLocked: Boolean(result?.is_locked),
+          isLoading: false,
+          isMutating: false,
+          errorMessage: "",
+        });
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setPeriodLockState({
+          isLocked: false,
+          isLoading: false,
+          isMutating: false,
+          errorMessage:
+            error?.message || "Gagal memuat status lock periode realisasi.",
+        });
+      }
+    }
+
+    loadPeriodLockStatus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedFiscalYearId, selectedPeriodMonth]);
+
+  useEffect(() => {
+    let isMounted = true;
+
     async function loadSummary() {
       if (!selectedRakVersionId || !selectedFiscalYearId || !selectedPeriodMonth) {
         summaryRequestKeyRef.current = "";
@@ -314,6 +422,13 @@ export default function BudgetRealizationPage() {
         setDraftValuesByDetailKey({});
         setRowMutationStateByDetailKey({});
         setPendingConfirmation(null);
+        setHistoryModalState({
+          isOpen: false,
+          context: null,
+          rows: [],
+          isLoading: false,
+          errorMessage: "",
+        });
         return;
       }
 
@@ -322,6 +437,13 @@ export default function BudgetRealizationPage() {
       setDraftValuesByDetailKey({});
       setRowMutationStateByDetailKey({});
       setPendingConfirmation(null);
+      setHistoryModalState({
+        isOpen: false,
+        context: null,
+        rows: [],
+        isLoading: false,
+        errorMessage: "",
+      });
       summaryRequestKeyRef.current = `${selectedRakVersionId}:summary:${selectedPeriodMonth}`;
       setSummaryState((currentState) => ({
         ...currentState,
@@ -401,6 +523,8 @@ export default function BudgetRealizationPage() {
       MONTH_OPTIONS[0],
     [selectedPeriodMonth]
   );
+
+  const canManagePeriodLock = isAdminRole(auth.roleCode);
 
   const summaryTotals = useMemo(
     () =>
@@ -621,7 +745,87 @@ export default function BudgetRealizationPage() {
   const isPreviousMonthDisabled = Number(selectedPeriodMonth) <= 1;
   const isNextMonthDisabled = Number(selectedPeriodMonth) >= 12;
 
+  async function refreshPeriodLockStatus() {
+    if (!selectedFiscalYearId || !selectedPeriodMonth) {
+      return;
+    }
+
+    const result = await getBudgetPeriodLockStatus(
+      selectedFiscalYearId,
+      selectedPeriodMonth
+    );
+
+    setPeriodLockState((currentState) => ({
+      ...currentState,
+      isLocked: Boolean(result?.is_locked),
+      isLoading: false,
+      errorMessage: "",
+    }));
+  }
+
+  async function handleTogglePeriodLock() {
+    if (!selectedFiscalYearId || !selectedPeriodMonth) {
+      return;
+    }
+
+    const nextIsLocked = !periodLockState.isLocked;
+
+    setPeriodLockState((currentState) => ({
+      ...currentState,
+      isMutating: true,
+      errorMessage: "",
+    }));
+
+    try {
+      const result = await setBudgetPeriodLock(
+        selectedFiscalYearId,
+        selectedPeriodMonth,
+        nextIsLocked
+      );
+
+      setPeriodLockState({
+        isLocked: Boolean(result?.is_locked),
+        isLoading: false,
+        isMutating: false,
+        errorMessage: "",
+      });
+
+      pushToast({
+        type: "success",
+        message: nextIsLocked ? "Bulan dikunci" : "Bulan dibuka",
+      });
+    } catch (error) {
+      setPeriodLockState((currentState) => ({
+        ...currentState,
+        isMutating: false,
+        errorMessage:
+          error?.message || "Gagal mengubah status lock periode realisasi.",
+      }));
+
+      pushToast({
+        type: "error",
+        message: error?.message || "Gagal mengubah status lock periode realisasi.",
+      });
+    }
+  }
+
   async function executeSaveRow(detailKey, summaryRow, detailRow, normalizedAmount) {
+    if (periodLockState.isLocked) {
+      setRowMutationStateByDetailKey((currentState) => ({
+        ...currentState,
+        [detailKey]: {
+          ...(currentState[detailKey] || {}),
+          [detailRow.budget_account_id]: {
+            ...(currentState[detailKey]?.[detailRow.budget_account_id] || {}),
+            isSaving: false,
+            errorMessage: "Bulan ini sudah dikunci. Realisasi tidak bisa diubah.",
+            savedMessage: "",
+          },
+        },
+      }));
+      return;
+    }
+
     setRowMutationStateByDetailKey((currentState) => ({
       ...currentState,
       [detailKey]: {
@@ -656,13 +860,22 @@ export default function BudgetRealizationPage() {
         message: "Tersimpan",
       });
     } catch (error) {
+      const errorMessage =
+        error?.message === "Periode realisasi bulan ini sudah dikunci."
+          ? "Bulan ini sudah dikunci. Realisasi tidak bisa diubah."
+          : error?.message || "Gagal menyimpan realisasi.";
+
+      if (error?.message === "Periode realisasi bulan ini sudah dikunci.") {
+        await refreshPeriodLockStatus();
+      }
+
       setRowMutationStateByDetailKey((currentState) => ({
         ...currentState,
         [detailKey]: {
           ...(currentState[detailKey] || {}),
           [detailRow.budget_account_id]: {
             isSaving: false,
-            errorMessage: error?.message || "Gagal menyimpan realisasi.",
+            errorMessage,
             savedMessage: "",
           },
         },
@@ -670,7 +883,7 @@ export default function BudgetRealizationPage() {
 
       pushToast({
         type: "error",
-        message: error?.message || "Gagal menyimpan realisasi.",
+        message: errorMessage,
       });
     }
   }
@@ -750,6 +963,170 @@ export default function BudgetRealizationPage() {
 
   function handleCancelPendingAction() {
     setPendingConfirmation(null);
+  }
+
+  async function handleOpenHistory(summaryRow, detailRow) {
+    const context = {
+      fiscalYearId: selectedFiscalYearId,
+      subActivityId: summaryRow.sub_activity_id,
+      subActivityName: summaryRow.sub_activity_name,
+      subActivityCode: summaryRow.sub_activity_code,
+      budgetAccountId: detailRow.budget_account_id,
+      budgetAccountName: detailRow.budget_account_name,
+      budgetAccountCode: detailRow.budget_account_code,
+      rakVersionIdSnapshot: selectedRakVersionId,
+      periodMonth: selectedPeriodMonth,
+      monthLabel: selectedMonthMeta.label,
+    };
+    const requestKey = [
+      context.fiscalYearId,
+      context.subActivityId,
+      context.budgetAccountId,
+      context.rakVersionIdSnapshot,
+      context.periodMonth,
+    ].join(":");
+
+    setHistoryModalState({
+      isOpen: true,
+      context: {
+        ...context,
+        requestKey,
+      },
+      rows: [],
+      isLoading: true,
+      errorMessage: "",
+    });
+
+    try {
+      const rows = await getBudgetRealizationAuditLogs({
+        fiscalYearId: context.fiscalYearId,
+        subActivityId: context.subActivityId,
+        budgetAccountId: context.budgetAccountId,
+        rakVersionIdSnapshot: context.rakVersionIdSnapshot,
+        periodMonth: context.periodMonth,
+        limit: 20,
+      });
+
+      setHistoryModalState((currentState) => {
+        if (currentState.context?.requestKey !== requestKey) {
+          return currentState;
+        }
+
+        return {
+          ...currentState,
+          rows,
+          isLoading: false,
+          errorMessage: "",
+        };
+      });
+    } catch (error) {
+      setHistoryModalState((currentState) => {
+        if (currentState.context?.requestKey !== requestKey) {
+          return currentState;
+        }
+
+        return {
+          ...currentState,
+          rows: [],
+          isLoading: false,
+          errorMessage:
+            error?.message || "Gagal memuat riwayat perubahan realisasi.",
+        };
+      });
+    }
+  }
+
+  function handleCloseHistory() {
+    setHistoryModalState({
+      isOpen: false,
+      context: null,
+      rows: [],
+      isLoading: false,
+      errorMessage: "",
+    });
+  }
+
+  async function handleExportExcel() {
+    if (!selectedFiscalYearId || !selectedRakVersionId || !selectedPeriodMonth) {
+      pushToast({
+        type: "error",
+        message: "Pilih tahun anggaran, versi RAK, dan bulan terlebih dahulu.",
+      });
+      return;
+    }
+
+    setIsExporting(true);
+
+    try {
+      const XLSX = await import("xlsx");
+      const rows = await getRealizationExportRows({
+        fiscalYearId: selectedFiscalYearId,
+        rakVersionId: selectedRakVersionId,
+        periodMonth: selectedPeriodMonth,
+      });
+      const fiscalYearLabel = selectedFiscalYear?.year || "-";
+      const versionLabel = selectedVersion
+        ? `V${selectedVersion.version_number} - ${
+            selectedVersion.title || selectedVersion.code || selectedVersion.id
+          }`
+        : selectedRakVersionId;
+      const worksheetRows = rows.map((row) => {
+        const planAmount = toNumericAmount(row.plan_amount);
+        const realizationAmount = toNumericAmount(row.realization_amount);
+
+        return {
+          "Tahun Anggaran": fiscalYearLabel,
+          "Versi RAK": versionLabel,
+          Bulan: selectedMonthMeta.label,
+          "Sub Kegiatan Kode": row.sub_activity_code || "",
+          "Sub Kegiatan Nama": row.sub_activity_name || "",
+          "Akun Kode": row.budget_account_code || "",
+          "Akun Nama": row.budget_account_name || "",
+          Plan: planAmount,
+          Realisasi: realizationAmount,
+          Deviasi: toNumericAmount(row.deviation_amount),
+          Keterangan: getRealizationRemark({
+            planAmount,
+            realizationAmount,
+          }),
+        };
+      });
+      const worksheet = XLSX.utils.json_to_sheet(worksheetRows);
+      worksheet["!cols"] = [
+        { wch: 16 },
+        { wch: 34 },
+        { wch: 14 },
+        { wch: 20 },
+        { wch: 34 },
+        { wch: 18 },
+        { wch: 34 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 24 },
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Realisasi");
+      XLSX.writeFile(
+        workbook,
+        `realisasi-anggaran-${getSafeFileSegment(
+          fiscalYearLabel
+        )}-${getSafeFileSegment(selectedMonthMeta.label)}.xlsx`
+      );
+
+      pushToast({
+        type: "success",
+        message: "Export Excel berhasil dibuat.",
+      });
+    } catch (error) {
+      pushToast({
+        type: "error",
+        message: error?.message || "Gagal export Excel realisasi.",
+      });
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   return (
@@ -954,8 +1331,38 @@ export default function BudgetRealizationPage() {
             flexWrap: "wrap",
           }}
         >
-          <div style={getTableCellLabelTypography()}>
-            Realisasi Bulan {selectedMonthMeta.label} per Sub Kegiatan
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={getTableCellLabelTypography()}>
+              REALISASI BULAN {String(selectedMonthMeta.label || "").toUpperCase()} PER SUB KEGIATAN
+            </div>
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              style={getInlineActionButtonStyle(prefersDarkMode, {
+                isEnabled:
+                  !isExporting &&
+                  Boolean(selectedFiscalYearId) &&
+                  Boolean(selectedRakVersionId) &&
+                  Boolean(selectedPeriodMonth),
+                tone: "accent",
+                height: 36,
+              })}
+              disabled={
+                isExporting ||
+                !selectedFiscalYearId ||
+                !selectedRakVersionId ||
+                !selectedPeriodMonth
+              }
+            >
+              {isExporting ? "Mengekspor..." : "Export Excel"}
+            </button>
           </div>
           {dirtyRowCount > 0 ? (
             <div style={getTableCellSubtitleTypography()}>
@@ -965,17 +1372,60 @@ export default function BudgetRealizationPage() {
 
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(160px, 220px) 42px 42px",
+              display: "flex",
               gap: 10,
               alignItems: "center",
+              justifyContent: "flex-end",
+              flexWrap: "wrap",
               marginLeft: "auto",
             }}
           >
+            {canManagePeriodLock ? (
+              <button
+                type="button"
+                onClick={handleTogglePeriodLock}
+                style={getInlineActionButtonStyle(prefersDarkMode, {
+                  isEnabled:
+                    !periodLockState.isLoading &&
+                    !periodLockState.isMutating &&
+                    Boolean(selectedFiscalYearId),
+                  tone: "neutral",
+                  height: 42,
+                })}
+                disabled={
+                  periodLockState.isLoading ||
+                  periodLockState.isMutating ||
+                  !selectedFiscalYearId
+                }
+              >
+                {periodLockState.isMutating
+                  ? "Memproses..."
+                  : periodLockState.isLocked
+                    ? "Unlock Bulan"
+                    : "Lock Bulan"}
+              </button>
+            ) : null}
+
+            <span
+              style={getChipStyle(prefersDarkMode, {
+                tone: periodLockState.isLocked ? "warning" : "muted",
+                size: "sm",
+              })}
+            >
+              {periodLockState.isLoading
+                ? "Memuat status..."
+                : periodLockState.isLocked
+                  ? "LOCKED"
+                  : "OPEN"}
+            </span>
+
             <select
               value={selectedPeriodMonth}
               onChange={(event) => setSelectedPeriodMonth(Number(event.target.value))}
-              style={getSelectStyle(prefersDarkMode, { tone: "panel", height: 42 })}
+              style={{
+                ...getSelectStyle(prefersDarkMode, { tone: "panel", height: 42 }),
+                width: 220,
+              }}
               aria-label="Pilih bulan realisasi"
             >
               {MONTH_OPTIONS.map((monthOption) => (
@@ -1035,6 +1485,18 @@ export default function BudgetRealizationPage() {
           </div>
         </div>
 
+        {periodLockState.errorMessage ? (
+          <div style={getAlertStyle(prefersDarkMode, { tone: "error" })}>
+            {periodLockState.errorMessage}
+          </div>
+        ) : null}
+
+        {periodLockState.isLocked ? (
+          <div style={getAlertStyle(prefersDarkMode, { tone: "warning" })}>
+            Bulan ini sudah dikunci. Realisasi tidak bisa diubah.
+          </div>
+        ) : null}
+
         {summaryState.isLoading ? (
           <div style={getLoadingStateStyle(prefersDarkMode)}>
             Memuat ringkasan realisasi...
@@ -1067,8 +1529,10 @@ export default function BudgetRealizationPage() {
             onToggleExpand={handleToggleExpand}
             draftValuesByDetailKey={draftValuesByDetailKey}
             rowMutationStateByDetailKey={rowMutationStateByDetailKey}
+            isPeriodLocked={periodLockState.isLocked}
             onDraftChange={handleDraftChange}
             onSaveRow={handleSaveRow}
+            onOpenHistory={handleOpenHistory}
           />
         ) : null}
       </section>
@@ -1085,6 +1549,16 @@ export default function BudgetRealizationPage() {
         message={pendingConfirmation?.message || ""}
         onConfirm={handleConfirmPendingAction}
         onCancel={handleCancelPendingAction}
+      />
+
+      <RealizationAuditLogModal
+        prefersDarkMode={prefersDarkMode}
+        isOpen={historyModalState.isOpen}
+        context={historyModalState.context}
+        rows={historyModalState.rows}
+        isLoading={historyModalState.isLoading}
+        errorMessage={historyModalState.errorMessage}
+        onClose={handleCloseHistory}
       />
     </div>
   );

@@ -55,12 +55,15 @@ export default function RealizationBudgetItemDetailTable({
   warningMessages = [],
   draftValues = {},
   rowMutationState = {},
+  isPeriodLocked = false,
   onDraftChange,
   onSaveRow,
+  onOpenHistory,
 }) {
   const tableBodyCellStyle = getTableBodyCellStyle({
     padding: "12px 10px",
   });
+  const defaultTableBodyCellStyle = getTableBodyCellStyle();
   const [hoveredRowKey, setHoveredRowKey] = useState("");
 
   return (
@@ -81,6 +84,8 @@ export default function RealizationBudgetItemDetailTable({
                     ...getTableHeaderCellStyle({
                       label: "Belanja Level 5",
                       color: "var(--text-muted)",
+                      alignMode: 3,
+                      isFirstColumn: true,
                     }),
                     minWidth: 260,
                     paddingLeft: 13,
@@ -90,7 +95,10 @@ export default function RealizationBudgetItemDetailTable({
                 </th>
                 <th
                   style={{
-                    ...getTableHeaderCellStyle({ label: `Plan ${monthLabel}` }),
+                    ...getTableHeaderCellStyle({
+                      label: `Plan ${monthLabel}`,
+                      alignMode: 3,
+                    }),
                     width: 150,
                   }}
                 >
@@ -98,7 +106,10 @@ export default function RealizationBudgetItemDetailTable({
                 </th>
                 <th
                   style={{
-                    ...getTableHeaderCellStyle({ label: `Realisasi ${monthLabel}` }),
+                    ...getTableHeaderCellStyle({
+                      label: `Realisasi ${monthLabel}`,
+                      alignMode: 3,
+                    }),
                     width: 160,
                   }}
                 >
@@ -108,6 +119,7 @@ export default function RealizationBudgetItemDetailTable({
                   style={{
                     ...getTableHeaderCellStyle({
                       label: "Deviation (Plan - Realisasi)",
+                      alignMode: 3,
                     }),
                     width: 220,
                   }}
@@ -116,7 +128,10 @@ export default function RealizationBudgetItemDetailTable({
                 </th>
                 <th
                   style={{
-                    ...getTableHeaderCellStyle({ label: "Input Realisasi" }),
+                    ...getTableHeaderCellStyle({
+                      label: "Input Realisasi",
+                      alignMode: 3,
+                    }),
                     width: 180,
                   }}
                 >
@@ -124,16 +139,21 @@ export default function RealizationBudgetItemDetailTable({
                 </th>
                 <th
                   style={{
-                    ...getTableHeaderCellStyle({ label: "Keterangan" }),
+                    ...getTableHeaderCellStyle({
+                      label: "Keterangan",
+                      alignMode: 3,
+                    }),
                     width: 220,
+                    textAlign: "center",
                   }}
                 >
                   Keterangan
                 </th>
                 <th
                   style={{
-                    ...getTableHeaderCellStyle({ label: "Aksi" }),
-                    width: 120,
+                    ...getTableHeaderCellStyle({ label: "Aksi", alignMode: 3 }),
+                    width: 210,
+                    textAlign: "center",
                   }}
                 >
                   Aksi
@@ -225,12 +245,17 @@ export default function RealizationBudgetItemDetailTable({
                             {row.budget_account_code}
                           </div>
                         </td>
-                        <td style={getAmountCellStyle(tableBodyCellStyle, row.plan_amount)}>
+                        <td
+                          style={getAmountCellStyle(
+                            defaultTableBodyCellStyle,
+                            row.plan_amount
+                          )}
+                        >
                           {formatCurrency(row.plan_amount)}
                         </td>
                         <td
                           style={getAmountCellStyle(
-                            tableBodyCellStyle,
+                            defaultTableBodyCellStyle,
                             row.realization_amount
                           )}
                         >
@@ -238,7 +263,7 @@ export default function RealizationBudgetItemDetailTable({
                         </td>
                         <td
                           style={getAmountCellStyle(
-                            tableBodyCellStyle,
+                            defaultTableBodyCellStyle,
                             row.deviation_amount
                           )}
                         >
@@ -267,7 +292,7 @@ export default function RealizationBudgetItemDetailTable({
 
                           return (
                             <>
-                              <td style={tableBodyCellStyle}>
+                              <td style={defaultTableBodyCellStyle}>
                                 <input
                                   type="number"
                                   min="0"
@@ -280,7 +305,8 @@ export default function RealizationBudgetItemDetailTable({
                                     ...getTextInputStyle(prefersDarkMode, {
                                       tone: "panel",
                                       height: 38,
-                                      isDisabled: mutationState.isSaving,
+                                      isDisabled:
+                                        mutationState.isSaving || isPeriodLocked,
                                     }),
                                     width: "100%",
                                     textAlign: "right",
@@ -288,7 +314,7 @@ export default function RealizationBudgetItemDetailTable({
                                       ? "var(--alert-warning-color, #b54708)"
                                       : undefined,
                                   }}
-                                  disabled={mutationState.isSaving}
+                                  disabled={mutationState.isSaving || isPeriodLocked}
                                 />
                                 {hasChanges || mutationState.savedMessage ? (
                                   <div
@@ -333,7 +359,7 @@ export default function RealizationBudgetItemDetailTable({
                                   </div>
                                 ) : null}
                               </td>
-                              <td style={tableBodyCellStyle}>
+                              <td style={{ ...tableBodyCellStyle, textAlign: "center" }}>
                                 {hasNegativeValue ? (
                                   <span
                                     style={getChipStyle(prefersDarkMode, {
@@ -374,12 +400,32 @@ export default function RealizationBudgetItemDetailTable({
                                   </span>
                                 )}
                               </td>
-                              <td style={tableBodyCellStyle}>
+                              <td style={{ ...tableBodyCellStyle, textAlign: "center" }}>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "center",
+                                    gap: 8,
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => onOpenHistory?.(row)}
+                                    style={getInlineActionButtonStyle(prefersDarkMode, {
+                                      isEnabled: true,
+                                      tone: "neutral",
+                                      height: 36,
+                                    })}
+                                  >
+                                    Riwayat
+                                  </button>
                                 <button
                                   type="button"
                                   onClick={() => onSaveRow?.(row)}
                                   style={getInlineActionButtonStyle(prefersDarkMode, {
                                     isEnabled:
+                                      !isPeriodLocked &&
                                       !mutationState.isSaving &&
                                       !hasNegativeValue &&
                                       hasChanges,
@@ -387,6 +433,7 @@ export default function RealizationBudgetItemDetailTable({
                                     height: 36,
                                   })}
                                   disabled={
+                                    isPeriodLocked ||
                                     mutationState.isSaving ||
                                     hasNegativeValue ||
                                     !hasChanges
@@ -394,6 +441,7 @@ export default function RealizationBudgetItemDetailTable({
                                 >
                                   {mutationState.isSaving ? "Menyimpan..." : "Save"}
                                 </button>
+                                </div>
                               </td>
                             </>
                           );

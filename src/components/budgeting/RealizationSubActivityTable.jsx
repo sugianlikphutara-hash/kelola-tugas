@@ -61,8 +61,10 @@ export default function RealizationSubActivityTable({
   onToggleExpand,
   draftValuesByDetailKey,
   rowMutationStateByDetailKey,
+  isPeriodLocked = false,
   onDraftChange,
   onSaveRow,
+  onOpenHistory,
 }) {
   const tableBodyCellStyle = getTableBodyCellStyle();
   const [hoveredRowKey, setHoveredRowKey] = useState("");
@@ -80,16 +82,26 @@ export default function RealizationSubActivityTable({
                     padding: "14px 10px",
                   }),
                   width: 40,
+                  textAlign: "center",
                 }}
               >
                 Detail
               </th>
-              <th style={getTableHeaderCellStyle({ label: "Sub Kegiatan" })}>
+              <th
+                style={getTableHeaderCellStyle({
+                  label: "Sub Kegiatan",
+                  alignMode: 3,
+                  isFirstColumn: true,
+                })}
+              >
                 Sub Kegiatan
               </th>
               <th
                 style={{
-                  ...getTableHeaderCellStyle({ label: `Plan ${monthLabel}` }),
+                  ...getTableHeaderCellStyle({
+                    label: `Plan ${monthLabel}`,
+                    alignMode: 3,
+                  }),
                   width: 180,
                 }}
               >
@@ -97,7 +109,10 @@ export default function RealizationSubActivityTable({
               </th>
               <th
                 style={{
-                  ...getTableHeaderCellStyle({ label: `Realisasi ${monthLabel}` }),
+                  ...getTableHeaderCellStyle({
+                    label: `Realisasi ${monthLabel}`,
+                    alignMode: 3,
+                  }),
                   width: 180,
                 }}
               >
@@ -107,6 +122,7 @@ export default function RealizationSubActivityTable({
                 style={{
                   ...getTableHeaderCellStyle({
                     label: "Deviation (Plan - Realisasi)",
+                    alignMode: 3,
                   }),
                   width: 220,
                 }}
@@ -115,8 +131,9 @@ export default function RealizationSubActivityTable({
               </th>
               <th
                 style={{
-                  ...getTableHeaderCellStyle({ label: "Keterangan" }),
+                  ...getTableHeaderCellStyle({ label: "Keterangan", alignMode: 3 }),
                   width: 180,
+                  textAlign: "center",
                 }}
               >
                 Keterangan
@@ -212,7 +229,7 @@ export default function RealizationSubActivityTable({
                     <td
                       style={{
                         ...tableBodyCellStyle,
-                        textAlign: "left",
+                        textAlign: "center",
                         ...expandedParentCellStyle,
                       }}
                     >
@@ -261,11 +278,15 @@ export default function RealizationSubActivityTable({
                             rowMutationState={
                               rowMutationStateByDetailKey?.[detailKey] || {}
                             }
+                            isPeriodLocked={isPeriodLocked}
                             onDraftChange={(detailRow, value) =>
                               onDraftChange?.(detailKey, detailRow, value)
                             }
                             onSaveRow={(detailRow) =>
                               onSaveRow?.(detailKey, row, detailRow)
+                            }
+                            onOpenHistory={(detailRow) =>
+                              onOpenHistory?.(row, detailRow)
                             }
                           />
                         </div>

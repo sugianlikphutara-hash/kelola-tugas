@@ -44,7 +44,7 @@ export default function SubActivityTable({
   const tableBodyCellStyle = getTableBodyCellStyle();
 
   return (
-    <div style={getTableFrameStyle({ borderRadius: 12 })}>
+    <div style={getTableFrameStyle({ borderRadius: 0 })}>
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 920 }}>
           <thead>
@@ -194,7 +194,7 @@ export default function SubActivityTable({
                         colSpan={5}
                         style={{
                           ...tableBodyCellStyle,
-                          padding: "0 18px 18px 62px",
+                          padding: "0 18px 18px 66px",
                           background: "var(--surface-1)",
                         }}
                       >
@@ -207,51 +207,56 @@ export default function SubActivityTable({
                             overflow: "hidden",
                           }}
                         >
-                          <div style={{ display: "grid", gap: 12, padding: 12 }}>
-                            {isEditable ? (
-                              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                                <button
-                                  type="button"
-                                  onClick={() => onOpenAddBudgetItem?.(row, detailState.rows)}
-                                  style={{
-                                    minHeight: 36,
-                                    padding: "8px 12px",
-                                    borderRadius: 8,
-                                    border: "1px solid var(--control-border)",
-                                    background: "var(--surface-1)",
-                                    color: "var(--text-h)",
-                                    fontWeight: 700,
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  Tambah Akun Belanja
-                                </button>
-                              </div>
-                            ) : null}
+                          {isEditable ? (
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "flex-end",
+                                padding: 12,
+                                borderBottom: "1px solid var(--border-strong)",
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => onOpenAddBudgetItem?.(row, detailState.rows)}
+                                style={{
+                                  minHeight: 36,
+                                  padding: "8px 12px",
+                                  borderRadius: 8,
+                                  border: "1px solid var(--control-border)",
+                                  background: "var(--surface-1)",
+                                  color: "var(--text-h)",
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                Tambah Akun Belanja
+                              </button>
+                            </div>
+                          ) : null}
 
-                            <BudgetItemTable
-                              key={[
-                                detailKey,
-                                ...detailState.rows.map((item) =>
-                                  [
-                                    item.id || item.budget_account_id,
-                                    item.annual_amount,
-                                    item.jan_amount,
-                                    item.dec_amount,
-                                  ].join(":")
-                                ),
-                              ].join("|")}
-                              prefersDarkMode={prefersDarkMode}
-                              rows={detailState.rows}
-                              isLoading={detailState.isLoading}
-                              errorMessage={detailState.errorMessage}
-                              warningMessages={detailState.warningMessages}
-                              isEditable={isEditable}
-                              pendingRowActionKey={pendingRowActionKey}
-                              onSaveRow={onSaveRow}
-                              onDeleteRow={onDeleteRow}
-                            />
-                          </div>
+                          <BudgetItemTable
+                            key={[
+                              detailKey,
+                              ...detailState.rows.map((item) =>
+                                [
+                                  item.id || item.budget_account_id,
+                                  item.annual_amount,
+                                  item.jan_amount,
+                                  item.dec_amount,
+                                ].join(":")
+                              ),
+                            ].join("|")}
+                            prefersDarkMode={prefersDarkMode}
+                            rows={detailState.rows}
+                            isLoading={detailState.isLoading}
+                            errorMessage={detailState.errorMessage}
+                            warningMessages={detailState.warningMessages}
+                            isEditable={isEditable}
+                            pendingRowActionKey={pendingRowActionKey}
+                            onSaveRow={onSaveRow}
+                            onDeleteRow={onDeleteRow}
+                          />
                         </div>
                       </td>
                     </tr>

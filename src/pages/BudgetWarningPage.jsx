@@ -360,7 +360,7 @@ export default function BudgetWarningPage() {
 
       <section style={{ display: "grid", gap: 10 }}>
         <div style={getTableCellLabelTypography()}>
-          Daftar Warning Anggaran
+          DAFTAR WARNING ANGGARAN
         </div>
 
         {warningState.isLoading ? (

@@ -17,6 +17,7 @@ import {
   getPanelStyle,
   getSelectStyle,
   getTableCellLabelTypography,
+  getTableCellSubtitleTypography,
 } from "../lib/controlStyles";
 import {
   getDraftActivationReadiness,
@@ -794,25 +795,51 @@ export default function BudgetPlanPage({ forcedRakVersionId = "" }) {
               flexWrap: "wrap",
             }}
           >
-            <div style={{ display: "grid", gap: 4 }}>
-              <div style={getMetaLabelStyle(prefersDarkMode)}>Versi Terpilih</div>
-              <div style={getTableCellLabelTypography()}>
-                {selectedVersion?.title || selectedVersion?.code || "Belum ada versi"}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "stretch",
+                gap: 16,
+                minWidth: 0,
+                flex: "1 1 520px",
+              }}
+            >
+              <div style={{ display: "grid", gap: 4, alignContent: "center" }}>
+                <div style={getMetaLabelStyle(prefersDarkMode)}>Versi Terpilih</div>
+                <div style={getTableCellLabelTypography()}>
+                  {selectedVersion?.title || selectedVersion?.code || "Belum ada versi"}
+                </div>
               </div>
-              {selectedVersion?.notes ? (
-                <div style={{ fontSize: 12, color: "var(--text-muted)", maxWidth: 520 }}>
-                  {selectedVersion.notes}
-                </div>
-              ) : null}
-              {selectedVersion?.rak_date ? (
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  Tanggal RAK: {selectedVersion.rak_date}
-                </div>
-              ) : null}
-              {selectedVersion?.fiscal_year_id ? (
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  Fiscal Year: {selectedVersion.fiscal_year_id}
-                </div>
+
+              {selectedVersion ? (
+                <>
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      width: 1,
+                      background: "var(--border-strong)",
+                    }}
+                  />
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 4,
+                      alignContent: "center",
+                      minWidth: 220,
+                    }}
+                  >
+                    {selectedVersion.notes ? (
+                      <div style={getTableCellSubtitleTypography()}>
+                        {selectedVersion.notes}
+                      </div>
+                    ) : null}
+                    {selectedVersion.rak_date ? (
+                      <div style={getTableCellSubtitleTypography()}>
+                        Tanggal RAK: {selectedVersion.rak_date}
+                      </div>
+                    ) : null}
+                  </div>
+                </>
               ) : null}
             </div>
 
@@ -992,7 +1019,7 @@ export default function BudgetPlanPage({ forcedRakVersionId = "" }) {
 
       <section style={{ display: "grid", gap: 10 }}>
         <div style={getTableCellLabelTypography()}>
-          Tabel Utama Rencana per Sub Kegiatan
+          TABEL UTAMA RENCANA PER SUB KEGIATAN
         </div>
 
         {summaryState.isLoading ? (

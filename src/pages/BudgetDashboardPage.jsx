@@ -158,7 +158,7 @@ function DashboardIssueTable({ prefersDarkMode, rows }) {
 
   return (
     <section style={{ display: "grid", gap: 10 }}>
-      <div style={getTableCellLabelTypography()}>Top 5 Sub Kegiatan Bermasalah</div>
+      <div style={getTableCellLabelTypography()}>TOP 5 SUB KEGIATAN BERMASALAH</div>
 
       <div style={getTableFrameStyle()}>
         <div style={{ overflowX: "auto" }}>

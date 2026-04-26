@@ -879,7 +879,7 @@ export function getTableFrameStyle(
   };
 }
 
-// alignMode: 1 (semua kiri), 2 (center kecuali label tertentu kiri)
+// alignMode: 1 (semua kiri), 2 (center kecuali label tertentu kiri), 3 (kolom pertama kiri, lainnya kanan)
 export function getTableHeaderCellStyle(
   {
     background = "var(--table-header-bg)",
@@ -892,6 +892,7 @@ export function getTableHeaderCellStyle(
     alignMode = 1,
     label = "",
     includeTypography = true,
+    isFirstColumn = false,
   } = {}
 ) {
   let textAlign = "left";
@@ -899,6 +900,8 @@ export function getTableHeaderCellStyle(
     const normalizedLabel = String(label || "").toUpperCase().trim();
     const leftAlignedLabels = ["TASK", "NAMA", "SUB KEGIATAN", "PELAKSANA"];
     textAlign = leftAlignedLabels.includes(normalizedLabel) ? "left" : "center";
+  } else if (alignMode === 3) {
+    textAlign = isFirstColumn ? "left" : "right";
   }
 
   return {

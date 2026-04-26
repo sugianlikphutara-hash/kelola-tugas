@@ -1,14 +1,14 @@
+import { Fragment } from "react";
 import {
   getAlertStyle,
   getChipStyle,
   getLoadingStateStyle,
-  getMetaLabelStyle,
   getTableBodyCellStyle,
   getTableCellLabelTypography,
+  getTableCellSecondaryLabelTypography,
   getTableCellSubtitleTypography,
   getTableFrameStyle,
   getTableHeaderCellStyle,
-  getTextInputStyle,
 } from "../../lib/controlStyles";
 
 function formatCurrency(value) {
@@ -35,15 +35,33 @@ export default function BudgetTrackingTable({
   return (
     <div style={getTableFrameStyle()}>
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1040 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1080 }}>
           <thead>
             <tr>
-              <th style={getTableHeaderCellStyle({ label: "Sub Kegiatan" })}>
+              <th
+                style={{
+                  ...getTableHeaderCellStyle({
+                    label: "Detail",
+                    padding: "14px 10px",
+                    alignMode: 3,
+                  }),
+                  width: 40,
+                }}
+              >
+                Detail
+              </th>
+              <th
+                style={getTableHeaderCellStyle({
+                  label: "Sub Kegiatan",
+                  alignMode: 3,
+                  isFirstColumn: true,
+                })}
+              >
                 Sub Kegiatan
               </th>
               <th
                 style={{
-                  ...getTableHeaderCellStyle({ label: "Plan" }),
+                  ...getTableHeaderCellStyle({ label: "Plan", alignMode: 3 }),
                   width: 180,
                 }}
               >
@@ -51,7 +69,7 @@ export default function BudgetTrackingTable({
               </th>
               <th
                 style={{
-                  ...getTableHeaderCellStyle({ label: "Realisasi" }),
+                  ...getTableHeaderCellStyle({ label: "Realisasi", alignMode: 3 }),
                   width: 180,
                 }}
               >
@@ -59,7 +77,7 @@ export default function BudgetTrackingTable({
               </th>
               <th
                 style={{
-                  ...getTableHeaderCellStyle({ label: "Progress %" }),
+                  ...getTableHeaderCellStyle({ label: "Progress %", alignMode: 3 }),
                   width: 140,
                 }}
               >
@@ -67,24 +85,27 @@ export default function BudgetTrackingTable({
               </th>
               <th
                 style={{
-                  ...getTableHeaderCellStyle({ label: "Status" }),
+                  ...getTableHeaderCellStyle({ label: "Status", alignMode: 3 }),
                   width: 160,
+                  textAlign: "center",
                 }}
               >
                 Status
               </th>
               <th
                 style={{
-                  ...getTableHeaderCellStyle({ label: "Warning" }),
+                  ...getTableHeaderCellStyle({ label: "Warning", alignMode: 3 }),
                   width: 120,
+                  textAlign: "center",
                 }}
               >
                 Warning
               </th>
               <th
                 style={{
-                  ...getTableHeaderCellStyle({ label: "Deviation" }),
+                  ...getTableHeaderCellStyle({ label: "Deviation", alignMode: 3 }),
                   width: 120,
+                  textAlign: "center",
                 }}
               >
                 Deviation
@@ -99,39 +120,67 @@ export default function BudgetTrackingTable({
                 isLoading: false,
                 errorMessage: "",
               };
+              const expandedParentCellStyle = isExpanded
+                ? { borderBottom: "1px solid var(--border-strong)" }
+                : null;
 
               return (
-                <>
-                  <tr key={`${row.rak_version_id}:${row.sub_activity_id}`}>
-                    <td style={tableBodyCellStyle}>
+                <Fragment key={`${row.rak_version_id}:${row.sub_activity_id}`}>
+                  <tr>
+                    <td
+                      style={{
+                        ...tableBodyCellStyle,
+                        textAlign: "right",
+                        width: 40,
+                        ...expandedParentCellStyle,
+                      }}
+                    >
                       <button
                         type="button"
                         onClick={() => onToggleExpand?.(row)}
+                        title="Lihat detail akun"
+                        aria-label="Lihat detail akun"
                         style={{
-                          ...getTextInputStyle(prefersDarkMode, {
-                            tone: "muted",
-                            height: 34,
-                            isDisabled: false,
-                          }),
-                          display: "grid",
-                          width: "100%",
-                          textAlign: "left",
+                          minWidth: 36,
+                          minHeight: 36,
+                          fontSize: 18,
+                          lineHeight: 1,
+                          borderRadius: 10,
+                          border: "1px solid var(--control-border)",
+                          background: "var(--surface-1)",
+                          color: "var(--text-h)",
                           cursor: "pointer",
-                          gap: 4,
                         }}
                       >
-                        <div style={getTableCellLabelTypography()}>
+                        {isExpanded ? "-" : "+"}{/*
                           {isExpanded ? "▾" : "▸"} {row.sub_activity_name || "-"}
-                        </div>
-                        <div style={getTableCellSubtitleTypography()}>
-                          {row.sub_activity_code || "-"}
-                        </div>
+                        */}
                       </button>
                     </td>
-                    <td style={{ ...tableBodyCellStyle, textAlign: "right" }}>
+                    <td style={{ ...tableBodyCellStyle, ...expandedParentCellStyle }}>
+                      <div style={getTableCellLabelTypography()}>
+                        {row.sub_activity_name || "-"}
+                      </div>
+                      <div style={getTableCellSubtitleTypography()}>
+                        {row.sub_activity_code || "-"}
+                      </div>
+                    </td>
+                    <td
+                      style={{
+                        ...tableBodyCellStyle,
+                        textAlign: "right",
+                        ...expandedParentCellStyle,
+                      }}
+                    >
                       {formatCurrency(row.plan_amount)}
                     </td>
-                    <td style={{ ...tableBodyCellStyle, textAlign: "right" }}>
+                    <td
+                      style={{
+                        ...tableBodyCellStyle,
+                        textAlign: "right",
+                        ...expandedParentCellStyle,
+                      }}
+                    >
                       {formatCurrency(row.realization_amount)}
                     </td>
                     <td
@@ -143,11 +192,18 @@ export default function BudgetTrackingTable({
                           Number(row.progress_percentage || 0) > 100
                             ? "var(--alert-error-color)"
                             : "var(--text-h)",
+                        ...expandedParentCellStyle,
                       }}
                     >
                       {Number(row.progress_percentage || 0).toFixed(2)}%
                     </td>
-                    <td style={tableBodyCellStyle}>
+                    <td
+                      style={{
+                        ...tableBodyCellStyle,
+                        textAlign: "center",
+                        ...expandedParentCellStyle,
+                      }}
+                    >
                       <div
                         style={getChipStyle(prefersDarkMode, {
                           tone: row.tracking_indicator?.tone || "muted",
@@ -157,7 +213,13 @@ export default function BudgetTrackingTable({
                         {row.tracking_indicator?.label || "-"}
                       </div>
                     </td>
-                    <td style={tableBodyCellStyle}>
+                    <td
+                      style={{
+                        ...tableBodyCellStyle,
+                        textAlign: "center",
+                        ...expandedParentCellStyle,
+                      }}
+                    >
                       <div
                         style={getChipStyle(prefersDarkMode, {
                           tone: getCountTone(row.warning_count, "warning"),
@@ -167,7 +229,13 @@ export default function BudgetTrackingTable({
                         {Number(row.warning_count || 0)}
                       </div>
                     </td>
-                    <td style={tableBodyCellStyle}>
+                    <td
+                      style={{
+                        ...tableBodyCellStyle,
+                        textAlign: "center",
+                        ...expandedParentCellStyle,
+                      }}
+                    >
                       <div
                         style={getChipStyle(prefersDarkMode, {
                           tone: getCountTone(row.deviation_count, "danger"),
@@ -181,70 +249,76 @@ export default function BudgetTrackingTable({
                   {isExpanded ? (
                     <tr key={`${row.rak_version_id}:${row.sub_activity_id}:detail`}>
                       <td
-                        colSpan={7}
+                        colSpan={8}
                         style={{
                           ...tableBodyCellStyle,
                           background: "var(--surface-1)",
-                          padding: 16,
+                          padding: "0 18px 18px 66px",
                         }}
                       >
-                        <div style={{ display: "grid", gap: 12 }}>
-                          <div style={getMetaLabelStyle(prefersDarkMode)}>
-                            Detail Tracking Akun Belanja
-                          </div>
-
+                        <div
+                          style={{
+                            border: "1px solid var(--border-strong)",
+                            borderTop: "none",
+                            borderRadius: "0 0 10px 10px",
+                            boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
+                            overflow: "hidden",
+                          }}
+                        >
                           {detailState.isLoading ? (
-                            <div style={getLoadingStateStyle(prefersDarkMode)}>
-                              Memuat detail tracking sub kegiatan...
+                            <div style={{ padding: 12 }}>
+                              <div style={getLoadingStateStyle(prefersDarkMode)}>
+                                Memuat detail tracking sub kegiatan...
+                              </div>
                             </div>
                           ) : null}
 
                           {!detailState.isLoading && detailState.errorMessage ? (
-                            <div style={getAlertStyle(prefersDarkMode, { tone: "error" })}>
-                              {detailState.errorMessage}
+                            <div style={{ padding: 12 }}>
+                              <div style={getAlertStyle(prefersDarkMode, { tone: "error" })}>
+                                {detailState.errorMessage}
+                              </div>
                             </div>
                           ) : null}
 
                           {!detailState.isLoading &&
                           !detailState.errorMessage &&
                           detailState.rows.length === 0 ? (
-                            <div style={getAlertStyle(prefersDarkMode, { tone: "info" })}>
-                              Belum ada detail tracking akun untuk sub kegiatan ini.
+                            <div style={{ padding: 12 }}>
+                              <div style={getAlertStyle(prefersDarkMode, { tone: "info" })}>
+                                Belum ada detail tracking akun untuk sub kegiatan ini.
+                              </div>
                             </div>
                           ) : null}
 
                           {!detailState.isLoading &&
                           !detailState.errorMessage &&
                           detailState.rows.length > 0 ? (
-                            <div style={getTableFrameStyle({ borderRadius: 10 })}>
+                            <div style={getTableFrameStyle({ borderRadius: 0 })}>
                               <div style={{ overflowX: "auto" }}>
                                 <table
                                   style={{
                                     width: "100%",
                                     borderCollapse: "collapse",
-                                    minWidth: 980,
+                                    minWidth: 1100,
                                   }}
                                 >
                                   <thead>
                                     <tr>
                                       <th
                                         style={getTableHeaderCellStyle({
-                                          label: "Kode Akun",
+                                          label: "Nama Akun Belanja",
+                                          alignMode: 3,
+                                          isFirstColumn: true,
                                         })}
                                       >
-                                        Kode Akun
-                                      </th>
-                                      <th
-                                        style={getTableHeaderCellStyle({
-                                          label: "Nama Akun",
-                                        })}
-                                      >
-                                        Nama Akun
+                                        Nama Akun Belanja
                                       </th>
                                       <th
                                         style={{
                                           ...getTableHeaderCellStyle({
                                             label: "Plan",
+                                            alignMode: 3,
                                           }),
                                           width: 160,
                                         }}
@@ -255,6 +329,7 @@ export default function BudgetTrackingTable({
                                         style={{
                                           ...getTableHeaderCellStyle({
                                             label: "Realisasi",
+                                            alignMode: 3,
                                           }),
                                           width: 160,
                                         }}
@@ -265,6 +340,7 @@ export default function BudgetTrackingTable({
                                         style={{
                                           ...getTableHeaderCellStyle({
                                             label: "Deviation",
+                                            alignMode: 3,
                                           }),
                                           width: 160,
                                         }}
@@ -275,6 +351,7 @@ export default function BudgetTrackingTable({
                                         style={{
                                           ...getTableHeaderCellStyle({
                                             label: "Deviation %",
+                                            alignMode: 3,
                                           }),
                                           width: 140,
                                         }}
@@ -285,11 +362,25 @@ export default function BudgetTrackingTable({
                                         style={{
                                           ...getTableHeaderCellStyle({
                                             label: "Warning",
+                                            alignMode: 3,
                                           }),
-                                          width: 260,
+                                          width: 120,
+                                          textAlign: "right",
                                         }}
                                       >
                                         Warning
+                                      </th>
+                                      <th
+                                        style={{
+                                          ...getTableHeaderCellStyle({
+                                            label: "KETERANGAN",
+                                            alignMode: 3,
+                                          }),
+                                          width: 260,
+                                          textAlign: "center",
+                                        }}
+                                      >
+                                        KETERANGAN
                                       </th>
                                     </tr>
                                   </thead>
@@ -299,10 +390,12 @@ export default function BudgetTrackingTable({
                                         key={`${row.sub_activity_id}:${detailRow.budget_account_id || detailRow.budget_account_code}`}
                                       >
                                         <td style={tableBodyCellStyle}>
-                                          {detailRow.budget_account_code || "-"}
-                                        </td>
-                                        <td style={tableBodyCellStyle}>
-                                          {detailRow.budget_account_name || "-"}
+                                          <div style={getTableCellSecondaryLabelTypography()}>
+                                            {detailRow.budget_account_name || "-"}
+                                          </div>
+                                          <div style={getTableCellSubtitleTypography()}>
+                                            {detailRow.budget_account_code || "-"}
+                                          </div>
                                         </td>
                                         <td
                                           style={{
@@ -348,12 +441,17 @@ export default function BudgetTrackingTable({
                                         >
                                           {Number(detailRow.deviation_percent || 0).toFixed(2)}%
                                         </td>
-                                        <td style={tableBodyCellStyle}>
+                                        <td
+                                          style={{
+                                            ...tableBodyCellStyle,
+                                            textAlign: "right",
+                                          }}
+                                        >
                                           <div
                                             style={{
                                               display: "grid",
                                               gap: 6,
-                                              justifyItems: "start",
+                                              justifyItems: "end",
                                             }}
                                           >
                                             <div
@@ -367,6 +465,21 @@ export default function BudgetTrackingTable({
                                             >
                                               {Number(detailRow.warning_count || 0)}
                                             </div>
+                                          </div>
+                                        </td>
+                                        <td
+                                          style={{
+                                            ...tableBodyCellStyle,
+                                            textAlign: "center",
+                                          }}
+                                        >
+                                          <div
+                                            style={{
+                                              display: "grid",
+                                              gap: 4,
+                                              justifyItems: "center",
+                                            }}
+                                          >
                                             {detailRow.warning_messages?.length ? (
                                               <div
                                                 style={{
@@ -386,7 +499,11 @@ export default function BudgetTrackingTable({
                                                   )
                                                 )}
                                               </div>
-                                            ) : null}
+                                            ) : (
+                                              <span style={{ color: "var(--text-muted)" }}>
+                                                -
+                                              </span>
+                                            )}
                                           </div>
                                         </td>
                                       </tr>
@@ -400,14 +517,14 @@ export default function BudgetTrackingTable({
                       </td>
                     </tr>
                   ) : null}
-                </>
+                </Fragment>
               );
             })}
 
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   style={{
                     ...tableBodyCellStyle,
                     padding: 24,

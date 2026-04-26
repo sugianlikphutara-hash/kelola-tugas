@@ -65,6 +65,7 @@ export default function BudgetItemTable({
   const tableBodyCellStyle = getTableBodyCellStyle({
     padding: "12px 10px",
   });
+  const metricTableBodyCellStyle = getTableBodyCellStyle();
 
   function createDraftValuesFromRow(row) {
     return {
@@ -141,14 +142,18 @@ export default function BudgetItemTable({
         </div>
       ) : null}
 
-      <div style={getTableFrameStyle({ borderRadius: 10 })}>
+      <div style={getTableFrameStyle({ borderRadius: 0 })}>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1750 }}>
             <thead>
               <tr>
                 <th
                   style={{
-                    ...getTableHeaderCellStyle({ label: "Nama Akun Belanja" }),
+                    ...getTableHeaderCellStyle({
+                      label: "Nama Akun Belanja",
+                      alignMode: 3,
+                      isFirstColumn: true,
+                    }),
                     ...getStickyCellStyle({
                       left: 0,
                       minWidth: 360,
@@ -163,7 +168,10 @@ export default function BudgetItemTable({
                   <th
                     key={column.key}
                     style={{
-                      ...getTableHeaderCellStyle({ label: column.label }),
+                      ...getTableHeaderCellStyle({
+                        label: column.label,
+                        alignMode: 3,
+                      }),
                       width: 110,
                       textAlign: "right",
                     }}
@@ -173,7 +181,7 @@ export default function BudgetItemTable({
                 ))}
                 <th
                   style={{
-                    ...getTableHeaderCellStyle({ label: "Total" }),
+                    ...getTableHeaderCellStyle({ label: "Total", alignMode: 3 }),
                     width: 140,
                     textAlign: "right",
                   }}
@@ -279,7 +287,7 @@ export default function BudgetItemTable({
                           <td
                             key={`${row.budget_account_id}-${column.key}`}
                             style={{
-                              ...tableBodyCellStyle,
+                              ...metricTableBodyCellStyle,
                               textAlign: "right",
                               background: rowBackground,
                             }}
@@ -317,7 +325,7 @@ export default function BudgetItemTable({
                         ))}
                         <td
                           style={{
-                            ...tableBodyCellStyle,
+                            ...metricTableBodyCellStyle,
                             textAlign: "right",
                             background: rowBackground,
                           }}

@@ -770,7 +770,7 @@ export default function BudgetTrackingPage() {
         >
           <div style={{ display: "grid", gap: 4 }}>
             <div style={getTableCellLabelTypography()}>
-              Tracking Penyerapan per Sub Kegiatan
+              TRACKING PENYERAPAN PER SUB KEGIATAN
             </div>
             <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
               Menampilkan {displayedRows.length} dari {trackingState.rows.length} Sub

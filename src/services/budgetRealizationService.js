@@ -127,6 +127,63 @@ export async function getDefaultBudgetRealizationStatus() {
   return statuses[0] || null;
 }
 
+export async function getBudgetPeriodLockStatus(fiscalYearId, periodMonth) {
+  if (!fiscalYearId) {
+    return null;
+  }
+
+  if (!periodMonth || Number(periodMonth) < 1 || Number(periodMonth) > 12) {
+    throw new Error("Bulan realisasi tidak valid.");
+  }
+
+  const { data, error } = await supabase
+    .from("fin_budget_period_locks")
+    .select("*")
+    .eq("fiscal_year_id", fiscalYearId)
+    .eq("period_month", periodMonth)
+    .maybeSingle();
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  return {
+    ...(data || {}),
+    fiscal_year_id: data?.fiscal_year_id || fiscalYearId,
+    period_month: data?.period_month || periodMonth,
+    is_locked: Boolean(data?.is_locked),
+  };
+}
+
+export async function setBudgetPeriodLock(fiscalYearId, periodMonth, isLocked) {
+  if (!fiscalYearId) {
+    throw new Error("Fiscal year wajib diisi.");
+  }
+
+  if (!periodMonth || Number(periodMonth) < 1 || Number(periodMonth) > 12) {
+    throw new Error("Bulan realisasi tidak valid.");
+  }
+
+  const { data, error } = await supabase.rpc("fin_set_budget_period_lock", {
+    p_fiscal_year_id: fiscalYearId,
+    p_period_month: periodMonth,
+    p_is_locked: Boolean(isLocked),
+  });
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  return {
+    ...(data || {}),
+    fiscal_year_id: data?.fiscal_year_id || fiscalYearId,
+    period_month: data?.period_month || periodMonth,
+    is_locked: Boolean(data?.is_locked),
+  };
+}
+
 export async function getRealizationSubActivitySummary(
   rakVersionId = null,
   fiscalYearId = null,
@@ -270,6 +327,46 @@ export async function getRealizationBudgetItemDetail(
   };
 }
 
+export async function getRealizationExportRows({
+  fiscalYearId,
+  rakVersionId,
+  periodMonth,
+}) {
+  if (!fiscalYearId) {
+    throw new Error("Fiscal year wajib diisi.");
+  }
+
+  if (!rakVersionId) {
+    throw new Error("Versi RAK wajib diisi.");
+  }
+
+  if (!periodMonth || Number(periodMonth) < 1 || Number(periodMonth) > 12) {
+    throw new Error("Bulan realisasi tidak valid.");
+  }
+
+  const version = await resolveRealizationRakVersion(rakVersionId, fiscalYearId);
+
+  if (!version?.id) {
+    throw new Error("Versi RAK tidak ditemukan.");
+  }
+
+  const rawBalanceRows =
+    await unwrapQueryResult(
+      supabase
+        .from("fin_v_budget_balance_unpivot")
+        .select("*")
+        .eq("fiscal_year_id", fiscalYearId)
+        .eq("rak_version_id", version.id)
+        .eq("period_month", periodMonth)
+        .order("sub_activity_code", { ascending: true })
+        .order("budget_account_code", { ascending: true })
+    );
+
+  return (rawBalanceRows || [])
+    .filter(isExpectedBalanceRow)
+    .map(mapRealizationDetailRow);
+}
+
 export async function saveAggregatedMonthlyRealization({
   fiscalYearId,
   subActivityId,
@@ -286,6 +383,57 @@ export async function saveAggregatedMonthlyRealization({
     p_period_month: periodMonth,
     p_amount: amount,
   });
+}
+
+export async function getBudgetRealizationAuditLogs({
+  fiscalYearId,
+  subActivityId,
+  budgetAccountId,
+  rakVersionIdSnapshot,
+  periodMonth,
+  limit = 20,
+}) {
+  if (!fiscalYearId) {
+    throw new Error("Fiscal year wajib diisi.");
+  }
+
+  if (!subActivityId) {
+    throw new Error("Sub Kegiatan wajib diisi.");
+  }
+
+  if (!budgetAccountId) {
+    throw new Error("Akun belanja wajib diisi.");
+  }
+
+  if (!rakVersionIdSnapshot) {
+    throw new Error("Snapshot versi RAK wajib diisi.");
+  }
+
+  if (!periodMonth || Number(periodMonth) < 1 || Number(periodMonth) > 12) {
+    throw new Error("Bulan realisasi tidak valid.");
+  }
+
+  const rows =
+    (await unwrapQueryResult(
+      supabase
+        .from("fin_budget_realization_audit_logs")
+        .select(
+          "id, changed_at, action_type, old_amount, new_amount, changed_by"
+        )
+        .eq("fiscal_year_id", fiscalYearId)
+        .eq("sub_activity_id", subActivityId)
+        .eq("budget_account_id", budgetAccountId)
+        .eq("rak_version_id_snapshot", rakVersionIdSnapshot)
+        .eq("period_month", periodMonth)
+        .order("changed_at", { ascending: false })
+        .limit(limit)
+    )) || [];
+
+  return rows.map((row) => ({
+    ...row,
+    old_amount: toNumericAmount(row.old_amount),
+    new_amount: toNumericAmount(row.new_amount),
+  }));
 }
 
 export async function saveMonthlyBudgetRealization({
