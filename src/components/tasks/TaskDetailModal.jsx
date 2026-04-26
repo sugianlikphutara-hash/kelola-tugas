@@ -310,7 +310,7 @@ export default function TaskDetailModal({
   const canCreateProgressForCurrentTask =
     canSubmitAnyProgress &&
     (!isStafRole || currentEmployeeId === taskAssigneeEmployeeId);
-  const canDeleteProgressForCurrentUser = canDeleteProgressReport(auth.roleCode);
+  const canDeleteAnyProgressForCurrentUser = canDeleteProgressReport(auth.roleCode);
   const canUploadAnyEvidence = canUploadTaskEvidence(auth.roleCode);
   const canUploadEvidenceForCurrentTask =
     canUploadAnyEvidence &&
@@ -322,6 +322,17 @@ export default function TaskDetailModal({
     : isCanceled
       ? "Task ini dibatalkan. Detail task hanya dapat dilihat, tetapi task masih bisa diedit dari menu aksi."
       : "";
+  function canDeleteProgressItem(item) {
+    if (canDeleteAnyProgressForCurrentUser) {
+      return true;
+    }
+
+    return (
+      isStafRole &&
+      canCreateProgressForCurrentTask &&
+      String(item?.reported_by_employee_id || "").trim() === currentEmployeeId
+    );
+  }
   const actionPlanLabel =
     taskView?.action_plan_title ||
     taskView?.action_plan_name ||
@@ -492,8 +503,8 @@ export default function TaskDetailModal({
     }
   }
 
-  async function handleDeleteProgressReport(reportId) {
-    if (!canDeleteProgressForCurrentUser) {
+  async function handleDeleteProgressReport(report) {
+    if (!canDeleteProgressItem(report)) {
       showActionError("Anda tidak memiliki izin untuk menghapus progress report.");
       return;
     }
@@ -507,6 +518,7 @@ export default function TaskDetailModal({
     }
 
     clearActionMessages();
+    const reportId = report?.id;
     setDeletingProgressReportId(reportId);
 
     try {
@@ -1191,10 +1203,10 @@ export default function TaskDetailModal({
                           >
                             {Number(item.progress_percent || 0)}%
                           </span>
-                          {canDeleteProgressForCurrentUser ? (
+                          {canDeleteProgressItem(item) ? (
                             <button
                               type="button"
-                              onClick={() => handleDeleteProgressReport(item.id)}
+                              onClick={() => handleDeleteProgressReport(item)}
                               disabled={deletingProgressReportId === item.id}
                               style={{
                                 ...controlStyles.getDangerButtonStyle(prefersDarkMode, {

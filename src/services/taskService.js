@@ -1699,24 +1699,6 @@ export async function getTaskProgressReports(taskId) {
   return data || [];
 }
 
-async function getLatestTaskProgressReport(taskId) {
-  const { data, error } = await supabase
-    .from("task_progress_reports")
-    .select("id, task_id, report_date, created_at, progress_percent")
-    .eq("task_id", taskId)
-    .order("report_date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    console.error(error);
-    throw error;
-  }
-
-  return data || null;
-}
-
 async function validateTaskProgressSubmission(taskId, nextProgressPercent) {
   const { data: taskData, error: taskError } = await supabase
     .from("tasks")
@@ -1788,27 +1770,6 @@ async function assertCanCreateTaskProgress(taskId, actorEmployeeId) {
   ) {
     throw new Error(
       "Anda hanya dapat mengisi progress untuk task yang ditugaskan kepada Anda."
-    );
-  }
-}
-
-function assertCanEditTaskProgressReport(currentReport, actorEmployeeId) {
-  const roleCode = getCurrentAuthenticatedRoleCode();
-
-  if (isProgressSupervisorRole(roleCode)) {
-    return;
-  }
-
-  if (normalizeRoleCode(roleCode) !== "STAF") {
-    throw new Error("Anda tidak memiliki izin untuk mengubah progress report.");
-  }
-
-  if (
-    normalizeEmployeeId(currentReport?.reported_by_employee_id) !==
-    normalizeEmployeeId(actorEmployeeId)
-  ) {
-    throw new Error(
-      "Anda hanya dapat mengubah progress report yang Anda buat sendiri."
     );
   }
 }
@@ -1923,20 +1884,6 @@ async function assertCanCompleteTaskFollowUp(followUpId, actorEmployeeId) {
     );
   }
 }
-
-async function syncTaskProgress(taskId, progressPercent) {
-  const { error } = await supabase
-    .from("tasks")
-    .update({ progress_percent: progressPercent })
-    .eq("id", taskId);
-
-  if (error) {
-    console.error(error);
-    throw error;
-  }
-}
-
-
 
 export async function createTaskProgressReport(payload) {
   await validateTaskProgressSubmission(
@@ -2151,151 +2098,49 @@ export async function updateTaskDailyReport(
 }
 
 export async function updateTaskProgressReport(reportId, payload) {
-  const currentTask = await validateTaskProgressSubmission(
+  await validateTaskProgressSubmission(
     payload.task_id,
     payload.progress_percent
   );
   const reportedByEmployeeId = resolveAuditEmployeeId(
     payload.reported_by_employee_id
   );
-  const { data: currentReport, error: currentReportError } = await supabase
-    .from("task_progress_reports")
-    .select(
-      "id, task_id, report_date, progress_percent, result_summary, issue_summary, next_step_summary, reported_by_employee_id"
-    )
-    .eq("id", reportId)
-    .single();
 
-  if (currentReportError) {
-    console.error(currentReportError);
-    throw currentReportError;
-  }
-
-  assertCanEditTaskProgressReport(currentReport, reportedByEmployeeId);
-
-  const { data, error } = await supabase
-    .from("task_progress_reports")
-    .update({
+  const { data, error } = await supabase.rpc("manage_task_progress_report", {
+    p_action: "update",
+    p_progress_report_id: reportId,
+    p_payload: {
       progress_percent: payload.progress_percent,
       result_summary: payload.result_summary,
       issue_summary: payload.issue_summary,
       next_step_summary: payload.next_step_summary,
       reported_by_employee_id: reportedByEmployeeId,
-    })
-    .eq("id", reportId)
-    .select()
-    .single();
+    },
+  });
 
   if (error) {
     console.error(error);
     throw error;
   }
 
-  try {
-    const latestReport = await getLatestTaskProgressReport(payload.task_id);
-    await syncTaskProgress(
-      payload.task_id,
-      Number(latestReport?.progress_percent ?? currentTask?.progress_percent ?? 0)
-    );
-  } catch (syncError) {
-    try {
-      await supabase
-        .from("task_progress_reports")
-        .update({
-          progress_percent: currentReport.progress_percent,
-          result_summary: currentReport.result_summary,
-          issue_summary: currentReport.issue_summary,
-          next_step_summary: currentReport.next_step_summary,
-          reported_by_employee_id: currentReport.reported_by_employee_id,
-        })
-        .eq("id", reportId);
-
-      await syncTaskProgress(
-        payload.task_id,
-        Number(currentTask?.progress_percent || 0)
-      );
-    } catch (rollbackError) {
-      console.error("Rollback update progress report gagal", rollbackError);
-    }
-
-    throw syncError;
-  }
-
-  return data;
+  return data?.progress_report || null;
 }
 
 export async function deleteTaskProgressReport(reportId) {
-  const actorEmployeeId = getCurrentAuditEmployeeId();
-  const roleCode = getCurrentAuthenticatedRoleCode();
+  const { data, error } = await supabase.rpc("manage_task_progress_report", {
+    p_action: "delete",
+    p_progress_report_id: reportId,
+    p_payload: {},
+  });
 
-  if (!isProgressSupervisorRole(roleCode)) {
-    throw new Error("Anda tidak memiliki izin untuk menghapus progress report.");
-  }
-
-  const { data: currentReport, error: currentReportError } = await supabase
-    .from("task_progress_reports")
-    .select(
-      "id, task_id, report_date, progress_percent, result_summary, issue_summary, next_step_summary, reported_by_employee_id, created_at"
-    )
-    .eq("id", reportId)
-    .single();
-
-  if (currentReportError) {
-    console.error(currentReportError);
-    throw currentReportError;
-  }
-
-  const { data: currentTask, error: currentTaskError } = await supabase
-    .from("tasks")
-    .select("id, progress_percent")
-    .eq("id", currentReport.task_id)
-    .single();
-
-  if (currentTaskError) {
-    console.error(currentTaskError);
-    throw currentTaskError;
-  }
-
-  const { error: deleteError } = await supabase
-    .from("task_progress_reports")
-    .delete()
-    .eq("id", reportId);
-
-  if (deleteError) {
-    console.error(deleteError);
-    throw deleteError;
-  }
-
-  try {
-    const latestReport = await getLatestTaskProgressReport(currentReport.task_id);
-    await syncTaskProgress(
-      currentReport.task_id,
-      Number(latestReport?.progress_percent ?? 0)
-    );
-  } catch (syncError) {
-    try {
-      await supabase.from("task_progress_reports").insert([
-        {
-          ...currentReport,
-          reported_by_employee_id:
-            currentReport.reported_by_employee_id || actorEmployeeId || null,
-        },
-      ]);
-
-      await syncTaskProgress(
-        currentReport.task_id,
-        Number(currentTask?.progress_percent || 0)
-      );
-    } catch (rollbackError) {
-      console.error("Rollback delete progress report gagal", rollbackError);
-    }
-
-    throw syncError;
+  if (error) {
+    console.error(error);
+    throw error;
   }
 
   return {
-    id: currentReport.id,
-    task_id: currentReport.task_id,
+    id: data?.progress_report?.id || reportId,
+    task_id: data?.task_id || data?.progress_report?.task_id || null,
   };
 }
 
