@@ -11,6 +11,7 @@ import {
   getExistingTaskDailyReport,
 } from "../services/taskService";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
+import BudgetReportSection from "../components/reporting/BudgetReportSection";
 import {
   getAlertStyle,
   getChipStyle,
@@ -45,6 +46,7 @@ const REPORTING_MODES = [
   { key: "MONTHLY", label: "Laporan Bulanan" },
   { key: "QUARTERLY", label: "Laporan Triwulan" },
   { key: "FINAL", label: "Laporan Akhir" },
+  { key: "BUDGET", label: "Laporan Anggaran" },
 ];
 const VALID_REPORTING_MODES = new Set(REPORTING_MODES.map((item) => item.key));
 const REPORTING_AUTO_REFRESH_INTERVAL_MS = 15000;
@@ -864,7 +866,7 @@ export default function ReportingPage() {
 
       <div style={{ display: "grid", gap: 20 }}>
 
-        {reportingMode !== "DAILY" ? (
+        {reportingMode !== "DAILY" && reportingMode !== "BUDGET" ? (
           <div
             style={{
               display: "grid",
@@ -880,6 +882,10 @@ export default function ReportingPage() {
               <strong>Laporan Harian</strong>.
             </div>
           </div>
+        ) : null}
+
+        {reportingMode === "BUDGET" ? (
+          <BudgetReportSection prefersDarkMode={prefersDarkMode} />
         ) : null}
 
         {reportingMode !== "DAILY" ? null : (
