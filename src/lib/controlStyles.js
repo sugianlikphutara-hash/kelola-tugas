@@ -17,9 +17,13 @@ export function getPageTitleStyle() {
 export function getPageSubtitleStyle() {
   return {
     marginTop: 6,
-    color: "var(--text-muted)",
-    fontSize: 14,
+    color: "var(--text-h)",
+    fontSize: 18,
+    fontWeight: 600,
+    fontFamily: '"Inter", sans-serif',
     lineHeight: 1.5,
+    letterSpacing: "1.5px",
+    textTransform: "uppercase",
   };
 }
 

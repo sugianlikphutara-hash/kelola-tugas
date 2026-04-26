@@ -5,17 +5,18 @@ import {
   getAlertStyle,
   getChipStyle,
   getEmptyStateStyle,
+  getFormLabelTypography,
   getInlineActionButtonStyle,
   getLoadingStateStyle,
   getMetaLabelStyle,
   getPanelStyle,
+  getPageSubtitleStyle,
   getSelectStyle,
   getTableBodyCellStyle,
   getTableCellLabelTypography,
   getTableCellSubtitleTypography,
   getTableFrameStyle,
   getTableHeaderCellStyle,
-  getSectionTitleTypography,
 } from "../../lib/controlStyles";
 import { getBudgetYears } from "../../services/masterDataService";
 import {
@@ -39,6 +40,13 @@ const SORT_OPTIONS = [
   { value: "ABSORPTION_ASC", label: "Serapan terendah" },
   { value: "OVERSPEND_FIRST", label: "Overspend dulu" },
 ];
+
+const REPORT_TABLE_COLUMN_WIDTHS = {
+  detail: 40,
+  subActivityCode: 180,
+  amount: 170,
+  status: 150,
+};
 
 function formatCurrency(value) {
   return new Intl.NumberFormat("id-ID", {
@@ -570,8 +578,8 @@ export default function BudgetReportSection({ prefersDarkMode }) {
       />
 
       <div style={{ display: "grid", gap: 4 }}>
-        <div style={getSectionTitleTypography()}>Laporan Anggaran</div>
-        <div style={getTableCellSubtitleTypography()}>
+        <div style={getPageSubtitleStyle()}>Laporan Anggaran</div>
+        <div style={getFormLabelTypography()}>
           Rekap tahunan Sub Kegiatan berdasarkan plan dan realisasi pada versi RAK
           terpilih.
         </div>
@@ -666,6 +674,45 @@ export default function BudgetReportSection({ prefersDarkMode }) {
         <div
           style={{
             display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 12,
+          }}
+        >
+          <SummaryCard
+            prefersDarkMode={prefersDarkMode}
+            label="Total Plan"
+            value={formatCurrency(summary.totalPlan)}
+          />
+          <SummaryCard
+            prefersDarkMode={prefersDarkMode}
+            label="Total Realisasi"
+            value={formatCurrency(summary.totalRealization)}
+          />
+          <SummaryCard
+            prefersDarkMode={prefersDarkMode}
+            label="Persentase Serapan"
+            value={formatPercent(summary.absorptionPercent)}
+          />
+          <SummaryCard
+            prefersDarkMode={prefersDarkMode}
+            label="Sub Kegiatan"
+            value={summary.subActivityCount}
+          />
+          <SummaryCard
+            prefersDarkMode={prefersDarkMode}
+            label="Warning"
+            value={summary.warningCount}
+          />
+          <SummaryCard
+            prefersDarkMode={prefersDarkMode}
+            label="Overspend"
+            value={summary.overspendCount}
+          />
+        </div>
+
+        <div
+          style={{
+            display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
             gap: 12,
             alignItems: "end",
@@ -723,45 +770,6 @@ export default function BudgetReportSection({ prefersDarkMode }) {
             </button>
           </div>
         </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: 12,
-          }}
-        >
-          <SummaryCard
-            prefersDarkMode={prefersDarkMode}
-            label="Total Plan"
-            value={formatCurrency(summary.totalPlan)}
-          />
-          <SummaryCard
-            prefersDarkMode={prefersDarkMode}
-            label="Total Realisasi"
-            value={formatCurrency(summary.totalRealization)}
-          />
-          <SummaryCard
-            prefersDarkMode={prefersDarkMode}
-            label="Persentase Serapan"
-            value={formatPercent(summary.absorptionPercent)}
-          />
-          <SummaryCard
-            prefersDarkMode={prefersDarkMode}
-            label="Sub Kegiatan"
-            value={summary.subActivityCount}
-          />
-          <SummaryCard
-            prefersDarkMode={prefersDarkMode}
-            label="Warning"
-            value={summary.warningCount}
-          />
-          <SummaryCard
-            prefersDarkMode={prefersDarkMode}
-            label="Overspend"
-            value={summary.overspendCount}
-          />
-        </div>
       </section>
 
       {reportState.isLoading ? (
@@ -801,13 +809,12 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                     style={{
                       ...getTableHeaderCellStyle({
                         label: "Detail",
-                        alignMode: 3,
+                        padding: "14px 10px",
                       }),
-                      width: 64,
-                      textAlign: "center",
+                      width: REPORT_TABLE_COLUMN_WIDTHS.detail,
                     }}
                   >
-                    Detail
+                    DETAIL
                   </th>
                   <th
                     style={{
@@ -816,7 +823,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                         alignMode: 3,
                         isFirstColumn: true,
                       }),
-                      width: 180,
+                      width: REPORT_TABLE_COLUMN_WIDTHS.subActivityCode,
                     }}
                   >
                     Kode Sub Kegiatan
@@ -824,7 +831,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                   <th
                     style={getTableHeaderCellStyle({
                       label: "Nama Sub Kegiatan",
-                      alignMode: 3,
+                      alignMode: 1,
                     })}
                   >
                     Nama Sub Kegiatan
@@ -832,7 +839,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                   <th
                     style={{
                       ...getTableHeaderCellStyle({ label: "Total Plan", alignMode: 3 }),
-                      width: 170,
+                      width: REPORT_TABLE_COLUMN_WIDTHS.amount,
                     }}
                   >
                     Total Plan
@@ -843,7 +850,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                         label: "Total Realisasi",
                         alignMode: 3,
                       }),
-                      width: 170,
+                      width: REPORT_TABLE_COLUMN_WIDTHS.amount,
                     }}
                   >
                     Total Realisasi
@@ -854,7 +861,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                         label: "Sisa Anggaran",
                         alignMode: 3,
                       }),
-                      width: 170,
+                      width: REPORT_TABLE_COLUMN_WIDTHS.amount,
                     }}
                   >
                     Sisa Anggaran
@@ -865,7 +872,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                         label: "Persentase Serapan",
                         alignMode: 3,
                       }),
-                      width: 170,
+                      width: REPORT_TABLE_COLUMN_WIDTHS.amount,
                     }}
                   >
                     Persentase Serapan
@@ -873,7 +880,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                   <th
                     style={{
                       ...getTableHeaderCellStyle({ label: "Status", alignMode: 3 }),
-                      width: 150,
+                      width: REPORT_TABLE_COLUMN_WIDTHS.status,
                       textAlign: "center",
                     }}
                   >
@@ -908,6 +915,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                           style={{
                             ...tableBodyCellStyle,
                             textAlign: "center",
+                            width: REPORT_TABLE_COLUMN_WIDTHS.detail,
                             ...expandedParentCellStyle,
                           }}
                         >
@@ -917,21 +925,28 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                             title="Lihat detail akun"
                             aria-label="Lihat detail akun"
                             style={{
-                              minWidth: 34,
-                              minHeight: 34,
+                              minWidth: 36,
+                              minHeight: 36,
                               fontSize: 18,
                               lineHeight: 1,
-                              borderRadius: 8,
+                              borderRadius: 10,
                               border: "1px solid var(--control-border)",
                               background: "var(--surface-1)",
                               color: "var(--text-h)",
                               cursor: "pointer",
                             }}
+                            aria-expanded={isExpanded}
                           >
                             {detailState.isLoading ? "..." : isExpanded ? "-" : "+"}
                           </button>
                         </td>
-                        <td style={{ ...tableBodyCellStyle, ...expandedParentCellStyle }}>
+                        <td
+                          style={{
+                            ...tableBodyCellStyle,
+                            width: REPORT_TABLE_COLUMN_WIDTHS.subActivityCode,
+                            ...expandedParentCellStyle,
+                          }}
+                        >
                           {row.sub_activity_code || "-"}
                         </td>
                         <td style={{ ...tableBodyCellStyle, ...expandedParentCellStyle }}>
@@ -940,6 +955,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                         <td
                           style={{
                             ...tableBodyCellStyle,
+                            width: REPORT_TABLE_COLUMN_WIDTHS.amount,
                             textAlign: "right",
                             ...expandedParentCellStyle,
                           }}
@@ -949,6 +965,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                         <td
                           style={{
                             ...tableBodyCellStyle,
+                            width: REPORT_TABLE_COLUMN_WIDTHS.amount,
                             textAlign: "right",
                             ...expandedParentCellStyle,
                           }}
@@ -958,6 +975,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                         <td
                           style={{
                             ...tableBodyCellStyle,
+                            width: REPORT_TABLE_COLUMN_WIDTHS.amount,
                             textAlign: "right",
                             ...expandedParentCellStyle,
                           }}
@@ -967,6 +985,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                         <td
                           style={{
                             ...tableBodyCellStyle,
+                            width: REPORT_TABLE_COLUMN_WIDTHS.amount,
                             textAlign: "right",
                             ...expandedParentCellStyle,
                           }}
@@ -978,6 +997,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                         <td
                           style={{
                             ...tableBodyCellStyle,
+                            width: REPORT_TABLE_COLUMN_WIDTHS.status,
                             textAlign: "center",
                             ...expandedParentCellStyle,
                           }}
@@ -999,7 +1019,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                             colSpan={8}
                             style={{
                               ...tableBodyCellStyle,
-                              padding: "0 18px 18px 78px",
+                              padding: "0 0 18px 66px",
                               background: "var(--surface-1)",
                             }}
                           >
@@ -1030,160 +1050,188 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                             {!detailState.isLoading &&
                             !detailState.errorMessage &&
                             detailState.rows.length > 0 ? (
-                              <div style={getTableFrameStyle({ borderRadius: 0 })}>
-                                <div style={{ overflowX: "auto" }}>
-                                  <table
-                                    style={{
-                                      width: "100%",
-                                      borderCollapse: "collapse",
-                                      minWidth: 920,
-                                    }}
-                                  >
-                                    <thead>
-                                      <tr>
-                                        <th
-                                          style={getTableHeaderCellStyle({
-                                            label: "Kode Akun",
-                                            alignMode: 3,
-                                            isFirstColumn: true,
-                                          })}
-                                        >
-                                          Kode Akun
-                                        </th>
-                                        <th
-                                          style={getTableHeaderCellStyle({
-                                            label: "Nama Akun",
-                                            alignMode: 3,
-                                          })}
-                                        >
-                                          Nama Akun
-                                        </th>
-                                        <th
-                                          style={getTableHeaderCellStyle({
-                                            label: "Total Plan",
-                                            alignMode: 3,
-                                          })}
-                                        >
-                                          Total Plan
-                                        </th>
-                                        <th
-                                          style={getTableHeaderCellStyle({
-                                            label: "Total Realisasi",
-                                            alignMode: 3,
-                                          })}
-                                        >
-                                          Total Realisasi
-                                        </th>
-                                        <th
-                                          style={getTableHeaderCellStyle({
-                                            label: "Sisa Anggaran",
-                                            alignMode: 3,
-                                          })}
-                                        >
-                                          Sisa Anggaran
-                                        </th>
-                                        <th
-                                          style={getTableHeaderCellStyle({
-                                            label: "Persentase Serapan",
-                                            alignMode: 3,
-                                          })}
-                                        >
-                                          Persentase Serapan
-                                        </th>
-                                        <th
-                                          style={{
-                                            ...getTableHeaderCellStyle({
-                                              label: "Status",
+                              <div
+                                style={{
+                                  border: "1px solid var(--border-strong)",
+                                  borderTop: "none",
+                                  borderRadius: "0 0 10px 10px",
+                                  boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                <div style={getTableFrameStyle({ borderRadius: 0 })}>
+                                  <div style={{ overflowX: "auto" }}>
+                                    <table
+                                      style={{
+                                        width: "100%",
+                                        borderCollapse: "collapse",
+                                        minWidth: 1094,
+                                      }}
+                                    >
+                                      <thead>
+                                        <tr>
+                                          <th
+                                            style={getTableHeaderCellStyle({
+                                              label: "Kode Akun",
                                               alignMode: 3,
-                                            }),
-                                            textAlign: "center",
-                                          }}
-                                        >
-                                          Status
-                                        </th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {detailState.rows.map((detailRow) => {
-                                        const detailPlanAmount =
-                                          getRowPlanAmount(detailRow);
-                                        const detailRealizationAmount =
-                                          getRowRealizationAmount(detailRow);
-                                        const detailStatus =
-                                          getBudgetReportStatus(detailRow);
-
-                                        return (
-                                          <tr
-                                            key={`${detailRow.sub_activity_id}:${detailRow.budget_account_id}`}
+                                              isFirstColumn: true,
+                                            })}
                                           >
-                                            <td style={tableBodyCellStyle}>
-                                              {detailRow.budget_account_code || "-"}
-                                            </td>
-                                            <td style={tableBodyCellStyle}>
-                                              {detailRow.budget_account_name || "-"}
-                                            </td>
-                                            <td
-                                              style={{
-                                                ...tableBodyCellStyle,
-                                                textAlign: "right",
-                                              }}
+                                            Kode Akun
+                                          </th>
+                                          <th
+                                            style={getTableHeaderCellStyle({
+                                              label: "Nama Akun",
+                                              alignMode: 1,
+                                            })}
+                                          >
+                                            Nama Akun
+                                          </th>
+                                          <th
+                                            style={{
+                                              ...getTableHeaderCellStyle({
+                                                label: "Total Plan",
+                                                alignMode: 3,
+                                              }),
+                                              width: REPORT_TABLE_COLUMN_WIDTHS.amount,
+                                            }}
+                                          >
+                                            Total Plan
+                                          </th>
+                                          <th
+                                            style={{
+                                              ...getTableHeaderCellStyle({
+                                                label: "Total Realisasi",
+                                                alignMode: 3,
+                                              }),
+                                              width: REPORT_TABLE_COLUMN_WIDTHS.amount,
+                                            }}
+                                          >
+                                            Total Realisasi
+                                          </th>
+                                          <th
+                                            style={{
+                                              ...getTableHeaderCellStyle({
+                                                label: "Sisa Anggaran",
+                                                alignMode: 3,
+                                              }),
+                                              width: REPORT_TABLE_COLUMN_WIDTHS.amount,
+                                            }}
+                                          >
+                                            Sisa Anggaran
+                                          </th>
+                                          <th
+                                            style={{
+                                              ...getTableHeaderCellStyle({
+                                                label: "Persentase Serapan",
+                                                alignMode: 3,
+                                              }),
+                                              width: REPORT_TABLE_COLUMN_WIDTHS.amount,
+                                            }}
+                                          >
+                                            Persentase Serapan
+                                          </th>
+                                          <th
+                                            style={{
+                                              ...getTableHeaderCellStyle({
+                                                label: "Status",
+                                                alignMode: 3,
+                                              }),
+                                              width: REPORT_TABLE_COLUMN_WIDTHS.status,
+                                              textAlign: "center",
+                                            }}
+                                          >
+                                            Status
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {detailState.rows.map((detailRow) => {
+                                          const detailPlanAmount =
+                                            getRowPlanAmount(detailRow);
+                                          const detailRealizationAmount =
+                                            getRowRealizationAmount(detailRow);
+                                          const detailStatus =
+                                            getBudgetReportStatus(detailRow);
+
+                                          return (
+                                            <tr
+                                              key={`${detailRow.sub_activity_id}:${detailRow.budget_account_id}`}
                                             >
-                                              {formatCurrency(detailPlanAmount)}
-                                            </td>
-                                            <td
-                                              style={{
-                                                ...tableBodyCellStyle,
-                                                textAlign: "right",
-                                              }}
-                                            >
-                                              {formatCurrency(
-                                                detailRealizationAmount
-                                              )}
-                                            </td>
-                                            <td
-                                              style={{
-                                                ...tableBodyCellStyle,
-                                                textAlign: "right",
-                                              }}
-                                            >
-                                              {formatCurrency(
-                                                detailPlanAmount -
-                                                  detailRealizationAmount
-                                              )}
-                                            </td>
-                                            <td
-                                              style={{
-                                                ...tableBodyCellStyle,
-                                                textAlign: "right",
-                                              }}
-                                            >
-                                              {formatPercent(
-                                                getAbsorptionPercent(
-                                                  detailPlanAmount,
-                                                  detailRealizationAmount
-                                                )
-                                              )}
-                                            </td>
-                                            <td
-                                              style={{
-                                                ...tableBodyCellStyle,
-                                                textAlign: "center",
-                                              }}
-                                            >
-                                              <span
-                                                style={getChipStyle(prefersDarkMode, {
-                                                  tone: detailStatus.tone,
-                                                  size: "sm",
-                                                })}
+                                              <td style={tableBodyCellStyle}>
+                                                {detailRow.budget_account_code || "-"}
+                                              </td>
+                                              <td style={tableBodyCellStyle}>
+                                                {detailRow.budget_account_name || "-"}
+                                              </td>
+                                              <td
+                                                style={{
+                                                  ...tableBodyCellStyle,
+                                                  width: REPORT_TABLE_COLUMN_WIDTHS.amount,
+                                                  textAlign: "right",
+                                                }}
                                               >
-                                                {detailStatus.label}
-                                              </span>
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
+                                                {formatCurrency(detailPlanAmount)}
+                                              </td>
+                                              <td
+                                                style={{
+                                                  ...tableBodyCellStyle,
+                                                  width: REPORT_TABLE_COLUMN_WIDTHS.amount,
+                                                  textAlign: "right",
+                                                }}
+                                              >
+                                                {formatCurrency(
+                                                  detailRealizationAmount
+                                                )}
+                                              </td>
+                                              <td
+                                                style={{
+                                                  ...tableBodyCellStyle,
+                                                  width: REPORT_TABLE_COLUMN_WIDTHS.amount,
+                                                  textAlign: "right",
+                                                }}
+                                              >
+                                                {formatCurrency(
+                                                  detailPlanAmount -
+                                                    detailRealizationAmount
+                                                )}
+                                              </td>
+                                              <td
+                                                style={{
+                                                  ...tableBodyCellStyle,
+                                                  width: REPORT_TABLE_COLUMN_WIDTHS.amount,
+                                                  textAlign: "right",
+                                                }}
+                                              >
+                                                {formatPercent(
+                                                  getAbsorptionPercent(
+                                                    detailPlanAmount,
+                                                    detailRealizationAmount
+                                                  )
+                                                )}
+                                              </td>
+                                              <td
+                                                style={{
+                                                  ...tableBodyCellStyle,
+                                                  width: REPORT_TABLE_COLUMN_WIDTHS.status,
+                                                  textAlign: "center",
+                                                }}
+                                              >
+                                                <span
+                                                  style={getChipStyle(prefersDarkMode, {
+                                                    tone: detailStatus.tone,
+                                                    size: "sm",
+                                                  })}
+                                                >
+                                                  {detailStatus.label}
+                                                </span>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
                                 </div>
                               </div>
                             ) : null}

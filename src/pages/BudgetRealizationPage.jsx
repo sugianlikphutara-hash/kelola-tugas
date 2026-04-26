@@ -14,11 +14,11 @@ import {
   getAlertStyle,
   getChipStyle,
   getEmptyStateStyle,
+  getFormLabelTypography,
   getInlineActionButtonStyle,
   getLoadingStateStyle,
   getMetaLabelStyle,
   getPageSubtitleStyle,
-  getPageTitleStyle,
   getPanelStyle,
   getSelectStyle,
   getTableCellLabelTypography,
@@ -1152,9 +1152,9 @@ export default function BudgetRealizationPage() {
 
   return (
     <div style={{ paddingBottom: 60, display: "grid", gap: 24 }}>
-      <div style={{ display: "grid", gap: 8 }}>
-        <h1 style={getPageTitleStyle()}>REALISASI ANGGARAN</h1>
-        <div style={getPageSubtitleStyle()}>
+      <div style={{ display: "grid", gap: 4 }}>
+        <div style={getPageSubtitleStyle()}>REALISASI ANGGARAN</div>
+        <div style={getFormLabelTypography()}>
           Input realisasi agregat bulanan per Sub Kegiatan dan akun belanja level 5
           untuk satu versi RAK, tetap tanpa transaksi individual.
         </div>

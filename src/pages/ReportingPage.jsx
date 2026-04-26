@@ -30,6 +30,7 @@ import {
   getNeutralButtonStyle,
   getSelectStyle,
   getDateInputStyle,
+  getPageSubtitleStyle,
   getPageTitleStyle,
   getFieldLabelStyle,
   getMetaLabelStyle,
@@ -873,10 +874,10 @@ export default function ReportingPage() {
               gap: 10,
             }}
           >
-            <div style={getSectionTitleTypography()}>
+            <div style={getPageSubtitleStyle()}>
               {REPORTING_MODES.find((item) => item.key === reportingMode)?.label || "Mode Pelaporan"}
             </div>
-            <div style={{ fontSize: 14, color: "var(--text-muted)", lineHeight: 1.6 }}>
+            <div style={getFormLabelTypography()}>
               Mode ini belum dibangun. Untuk tahap sekarang, fokus implementasi masih di
               {" "}
               <strong>Laporan Harian</strong>.
@@ -901,7 +902,7 @@ export default function ReportingPage() {
                 }}
               >
                 <div style={{ display: "grid", gap: 4 }}>
-                  <div style={getSectionTitleTypography()}>Laporan Harian</div>
+                  <div style={getPageSubtitleStyle()}>Laporan Harian</div>
                   <div style={getFormLabelTypography()}>
                     Fokus pada tanggal pelaporan. Klik task untuk membuka rincian laporan secara inline.
                   </div>

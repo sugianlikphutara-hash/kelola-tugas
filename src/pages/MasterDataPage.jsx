@@ -55,6 +55,7 @@ import {
   getChipStyle,
   getAlertStyle,
   getFieldLabelStyle,
+  getFormLabelTypography,
   getInlineActionButtonStyle,
   getModalStyle,
   getNeutralButtonStyle,
@@ -70,6 +71,7 @@ import {
   getTableHeaderCellStyle,
   getTextInputStyle,
   getDateInputStyle,
+  getPageSubtitleStyle,
   getPageTitleStyle,
 } from "../lib/controlStyles";
 
@@ -3542,8 +3544,8 @@ export default function MasterDataPage() {
         <section style={{ minWidth: 0, display: "grid", gap: 16 }}>
           <div style={{ padding: "8px 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: 20, color: "var(--text-h)" }}>{moduleMeta.title}</h2>
-              <div style={{ marginTop: 6, color: "var(--text-muted)", fontSize: 13 }}>{moduleMeta.description}</div>
+              <h2 style={getPageSubtitleStyle()}>{moduleMeta.title}</h2>
+              <div style={getFormLabelTypography()}>{moduleMeta.description}</div>
             </div>
             {moduleMeta.addLabel ? (
               <button

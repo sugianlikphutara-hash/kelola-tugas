@@ -12,9 +12,9 @@ import {
   getEmptyStateStyle,
   getLoadingStateStyle,
   getMetaLabelStyle,
+  getFormLabelTypography,
   getOutlinedButtonStyle,
   getPageSubtitleStyle,
-  getPageTitleStyle,
   getPanelStyle,
   getSelectStyle,
   getTableCellLabelTypography,
@@ -759,9 +759,9 @@ export default function BudgetPlanPage({ forcedRakVersionId = "" }) {
         toasts={toasts}
         onDismiss={dismissToast}
       />
-      <div style={{ display: "grid", gap: 8 }}>
-        <h1 style={getPageTitleStyle()}>RENCANA ANGGARAN</h1>
-        <div style={getPageSubtitleStyle()}>
+      <div style={{ display: "grid", gap: 4 }}>
+        <div style={getPageSubtitleStyle()}>RENCANA ANGGARAN</div>
+        <div style={getFormLabelTypography()}>
           Ringkasan anggaran RAK per Sub Kegiatan dengan detail Belanja Level 5
           dan bulanan Jan-Des dari satu versi RAK yang dipilih.
         </div>

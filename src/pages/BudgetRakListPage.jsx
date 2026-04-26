@@ -7,11 +7,11 @@ import {
   getAlertStyle,
   getChipStyle,
   getEmptyStateStyle,
+  getFormLabelTypography,
   getInlineActionButtonStyle,
   getLoadingStateStyle,
   getMetaLabelStyle,
   getPageSubtitleStyle,
-  getPageTitleStyle,
   getPanelStyle,
   getSelectStyle,
   getTableBodyCellStyle,
@@ -322,9 +322,9 @@ export default function BudgetRakListPage({ onOpenVersionDetail }) {
         onDismiss={dismissToast}
       />
 
-      <div style={{ display: "grid", gap: 8 }}>
-        <h1 style={getPageTitleStyle()}>VERSI RAK</h1>
-        <div style={getPageSubtitleStyle()}>
+      <div style={{ display: "grid", gap: 4 }}>
+        <div style={getPageSubtitleStyle()}>VERSI RAK</div>
+        <div style={getFormLabelTypography()}>
           Daftar versi RAK per Tahun Anggaran. Halaman ini hanya menampilkan level
           versi, tanpa merender item anggaran.
         </div>

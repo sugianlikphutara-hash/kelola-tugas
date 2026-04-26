@@ -5,10 +5,10 @@ import {
   getAlertStyle,
   getChipStyle,
   getEmptyStateStyle,
+  getFormLabelTypography,
   getLoadingStateStyle,
   getMetaLabelStyle,
   getPageSubtitleStyle,
-  getPageTitleStyle,
   getPanelStyle,
   getSelectStyle,
   getSubPageButtonStyle,
@@ -503,9 +503,9 @@ export default function BudgetTrackingPage() {
 
   return (
     <div style={{ paddingBottom: 60, display: "grid", gap: 18 }}>
-      <div style={{ display: "grid", gap: 8 }}>
-        <h1 style={getPageTitleStyle()}>MONITORING ANGGARAN</h1>
-        <div style={getPageSubtitleStyle()}>
+      <div style={{ display: "grid", gap: 4 }}>
+        <div style={getPageSubtitleStyle()}>MONITORING ANGGARAN</div>
+        <div style={getFormLabelTypography()}>
           Monitoring plan versus realisasi per Sub Kegiatan untuk versi RAK yang
           dipilih, tetap read-only dan memakai data progress summary existing.
         </div>

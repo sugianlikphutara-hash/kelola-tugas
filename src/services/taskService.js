@@ -1570,32 +1570,30 @@ async function replaceTaskEvidenceRequests(taskId, evidenceRequest) {
 
 export async function createTaskWithRelations(payload) {
   assertCanCreateTask();
-  const createdTask = await createTask(
-    {
-      action_plan_id: payload.action_plan_id,
-      title: payload.title,
-      description: payload.description,
-      start_date: payload.start_date,
-      due_date: payload.due_date,
-      status_id: payload.status_id,
-      priority_id: payload.priority_id,
-      approval_status: payload.approval_status,
-    }
+
+  const { data: createdTask, error } = await supabase.rpc(
+    "create_task_with_relations",
+    { p_payload: payload }
   );
 
-  try {
-    await replaceTaskAssignments(createdTask.id, payload.assignee_id);
-    await replaceTaskEvidenceRequests(createdTask.id, payload.evidence_request);
-    return createdTask;
-  } catch (error) {
-    try {
-      await deleteTask(createdTask.id);
-    } catch (rollbackError) {
-      console.error("Rollback create task gagal", rollbackError);
-    }
-
+  if (error) {
+    console.error("RPC create_task_with_relations gagal:", error);
     throw error;
   }
+
+  if (createdTask?.id) {
+    try {
+      await syncTaskKanbanCard(
+        createdTask.id,
+        createdTask.status_id,
+        createdTask.approval_status
+      );
+    } catch (kanbanError) {
+      console.error("Failed to sync kanban card after RPC creation", kanbanError);
+    }
+  }
+
+  return createdTask;
 }
 
 export async function updateTaskWithRelations(taskId, payload) {

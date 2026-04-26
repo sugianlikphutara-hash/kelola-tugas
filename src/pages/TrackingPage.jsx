@@ -30,6 +30,8 @@ import {
   getPrimaryButtonStyle,
   getTextInputStyle,
   getSearchInputStyle,
+  getFormLabelTypography,
+  getPageSubtitleStyle,
   getPageTitleStyle,
 } from "../lib/controlStyles";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
@@ -121,6 +123,40 @@ function isNoProgress(task) {
 function isLowProgress(task) {
   const progress = Number(task?.progress_percent || 0);
   return progress > 0 && progress < 50 && task?.task_status_code !== "SELESAI";
+}
+
+function SearchGlyph() {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        left: 12,
+        top: "50%",
+        width: 12,
+        height: 12,
+        border: "1.8px solid var(--text-muted)",
+        borderRadius: "50%",
+        transform: "translateY(-50%)",
+        pointerEvents: "none",
+        opacity: 0.75,
+        boxSizing: "border-box",
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          right: -5,
+          bottom: -3,
+          width: 6,
+          height: 2,
+          borderRadius: 2,
+          background: "var(--text-muted)",
+          transform: "rotate(45deg)",
+        }}
+      />
+    </span>
+  );
 }
 
 function formatDate(date) {
@@ -1454,6 +1490,72 @@ export default function TrackingPage({ onOpenTaskInTimeline }) {
 
       {trackingMode === "ISSUES" ? (
         <Fragment>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: 12,
+              flexWrap: "wrap",
+              marginBottom: 12,
+            }}
+          >
+            <div style={{ display: "grid", gap: 4 }}>
+              <div style={getPageSubtitleStyle()}>Tracking Masalah</div>
+              <div style={getFormLabelTypography()}>
+                Klik kartu untuk memfokuskan tabel ke kategori masalah tertentu.
+              </div>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                minWidth: 220,
+              }}
+            >
+              <div style={{ position: "relative", flex: 1 }}>
+                <input
+                  type="text"
+                  placeholder="Cari Task..."
+                  value={issueSearchQuery}
+                  onChange={(event) => setIssueSearchQuery(event.target.value)}
+                  style={getSearchInputStyle(prefersDarkMode, {
+                    hasValue: Boolean(issueSearchQuery),
+                  })}
+                  aria-label="Search tasks"
+                />
+                <SearchGlyph />
+                {issueSearchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => setIssueSearchQuery("")}
+                    style={{
+                      position: "absolute",
+                      right: 8,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      color: "var(--text-muted)",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      lineHeight: 1,
+                      cursor: "pointer",
+                      padding: "4px 4px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                    aria-label="Clear search"
+                  >
+                    <span style={{ fontSize: 14, lineHeight: 1 }}>x</span>
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
           {isMobile ? (
             <details
               open={isIssuesFiltersOpen}
@@ -1493,13 +1595,7 @@ export default function TrackingPage({ onOpenTaskInTimeline }) {
                     flexWrap: "wrap",
                   }}
                 >
-                  {/*}<div>
-                    
-                    <div style={{ fontSize: 15, color: prefersDarkMode ? "var(--text-subtle)" : "var(--text-muted)" }}>
-                      Klik kartu untuk memfokuskan tabel ke kategori masalah tertentu.
-                    </div> 
-                    
-                  </div>*/}
+                  <div />
                   <div style={{ fontSize: 13, color: prefersDarkMode ? "var(--text-subtle)" : "var(--text-muted)" }}>
                     {isLoadingTasks ? "Memuat ringkasan..." : `${problemTasks.length} task bermasalah terpantau`}
                   </div>
@@ -1613,20 +1709,14 @@ export default function TrackingPage({ onOpenTaskInTimeline }) {
             <div style={{ display: "grid", gap: 10, marginBottom: 18 }}>
               <div
                 style={{
-                  display: "flex",
+                  display: "none",
                   justifyContent: "space-between",
                   gap: 12,
                   alignItems: "flex-start",
                   flexWrap: "wrap",
                 }}
               >
-                <div>
-                  {/*}
-                  <div style={{ fontSize: 15, color: prefersDarkMode ? "var(--text-subtle)" : "var(--text-muted)" }}>
-                    Klik kartu untuk memfokuskan tabel ke kategori masalah tertentu.
-                  </div>
-                  */}
-                </div>
+                <div />
                 <div
                   style={{
                     display: "flex",
@@ -1945,19 +2035,78 @@ export default function TrackingPage({ onOpenTaskInTimeline }) {
             style={{
               display: "flex",
               justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "grid", gap: 4 }}>
+              <div style={getPageSubtitleStyle()}>Tracking Sub Task</div>
+              <div style={getFormLabelTypography()}>
+                Fokus pada tanggal. Klik task untuk membuka rincian sub task secara inline.
+              </div>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                minWidth: 220,
+              }}
+            >
+              <div style={{ position: "relative", flex: 1 }}>
+                <input
+                  type="text"
+                  placeholder="Cari Task..."
+                  value={dailySearchQuery}
+                  onChange={(event) => setDailySearchQuery(event.target.value)}
+                  style={getSearchInputStyle(prefersDarkMode, {
+                    hasValue: Boolean(dailySearchQuery),
+                  })}
+                  aria-label="Search tasks"
+                />
+                <SearchGlyph />
+                {dailySearchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => setDailySearchQuery("")}
+                    style={{
+                      position: "absolute",
+                      right: 8,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      color: "var(--text-muted)",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      lineHeight: 1,
+                      cursor: "pointer",
+                      padding: "4px 4px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                    aria-label="Clear search"
+                  >
+                    <span style={{ fontSize: 14, lineHeight: 1 }}>x</span>
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "none",
+              justifyContent: "space-between",
               gap: 12,
               alignItems: "flex-start",
               flexWrap: "wrap",
               marginBottom: 12,
             }}
           >
-            <div style={{ display: "grid", gap: 4, minHeight: 40 }}>
-              {/*}
-              <div style={{ fontSize: 15, color: prefersDarkMode ? "var(--text-subtle)" : "var(--text-muted)" }}>
-                Fokus pada tanggal. Klik task untuk membuka rincian sub task secara inline.
-              </div>
-              */}
-            </div>
+            <div style={{ display: "grid", gap: 4, minHeight: 40 }} />
             <div
               style={{
                 display: "flex",

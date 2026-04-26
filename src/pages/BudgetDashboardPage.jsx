@@ -4,10 +4,10 @@ import {
   getAlertStyle,
   getChipStyle,
   getEmptyStateStyle,
+  getFormLabelTypography,
   getLoadingStateStyle,
   getMetaLabelStyle,
   getPageSubtitleStyle,
-  getPageTitleStyle,
   getPanelStyle,
   getSelectStyle,
   getTableBodyCellStyle,
@@ -585,9 +585,9 @@ export default function BudgetDashboardPage() {
 
   return (
     <div style={{ paddingBottom: 60, display: "grid", gap: 18 }}>
-      <div style={{ display: "grid", gap: 8 }}>
-        <h1 style={getPageTitleStyle()}>RINGKASAN ANGGARAN</h1>
-        <div style={getPageSubtitleStyle()}>
+      <div style={{ display: "grid", gap: 4 }}>
+        <div style={getPageSubtitleStyle()}>RINGKASAN ANGGARAN</div>
+        <div style={getFormLabelTypography()}>
           Ringkasan kesehatan anggaran berbasis data monitoring existing, tetap
           read-only dan fokus pada issue yang perlu diprioritaskan.
         </div>

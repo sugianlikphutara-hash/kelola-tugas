@@ -4,15 +4,17 @@ import BudgetPlanPage from "./BudgetPlanPage";
 import BudgetRealizationPage from "./BudgetRealizationPage";
 import BudgetRakListPage from "./BudgetRakListPage";
 import BudgetTrackingPage from "./BudgetTrackingPage";
-import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode";
-import {
-  getOutlinedButtonStyle,
-  getPanelStyle,
-  getPrimaryButtonStyle,
-} from "../lib/controlStyles";
+import { getPageTitleStyle } from "../lib/controlStyles";
+
+const BUDGET_SECTIONS = [
+  { key: "dashboard", label: "Ringkasan" },
+  { key: "rak-list", label: "Versi RAK" },
+  { key: "plan", label: "Rencana" },
+  { key: "realization", label: "Realisasi" },
+  { key: "progress", label: "Monitoring" },
+];
 
 export default function BudgetingPage() {
-  const prefersDarkMode = usePrefersDarkMode();
   const [activeSection, setActiveSection] = useState("dashboard");
   const [selectedRakVersionIdForDetail, setSelectedRakVersionIdForDetail] = useState("");
 
@@ -27,110 +29,55 @@ export default function BudgetingPage() {
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
-      <section
+      <div
         style={{
-          ...getPanelStyle({ padding: 16, borderRadius: 12 }),
           display: "flex",
+          alignItems: "center",
           flexWrap: "wrap",
-          gap: 10,
+          gap: 16,
         }}
       >
-        <button
-          type="button"
-          onClick={() => setActiveSection("dashboard")}
-          style={
-            activeSection === "dashboard"
-              ? getPrimaryButtonStyle(prefersDarkMode, {
-                  isEnabled: true,
-                  height: 38,
-                  size: "sm",
-                })
-              : getOutlinedButtonStyle(prefersDarkMode, {
-                  isEnabled: true,
-                  height: 38,
-                  size: "sm",
-                })
-          }
+        <h1 style={{ ...getPageTitleStyle(), margin: 0 }}>ANGGARAN</h1>
+        <div
+          style={{
+            width: "1.5px",
+            height: 28,
+            backgroundColor: "var(--border-strong)",
+            display: "block",
+          }}
+        />
+        <div
+          style={{
+            display: "flex",
+            gap: 20,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
         >
-          Ringkasan Anggaran
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection("rak-list")}
-          style={
-            activeSection === "rak-list"
-              ? getPrimaryButtonStyle(prefersDarkMode, {
-                  isEnabled: true,
-                  height: 38,
-                  size: "sm",
-                })
-              : getOutlinedButtonStyle(prefersDarkMode, {
-                  isEnabled: true,
-                  height: 38,
-                  size: "sm",
-                })
-          }
-        >
-          Versi RAK
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection("plan")}
-          style={
-            activeSection === "plan"
-              ? getPrimaryButtonStyle(prefersDarkMode, {
-                  isEnabled: true,
-                  height: 38,
-                  size: "sm",
-                })
-              : getOutlinedButtonStyle(prefersDarkMode, {
-                  isEnabled: true,
-                  height: 38,
-                  size: "sm",
-                })
-          }
-        >
-          Rencana Anggaran
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection("realization")}
-          style={
-            activeSection === "realization"
-              ? getPrimaryButtonStyle(prefersDarkMode, {
-                  isEnabled: true,
-                  height: 38,
-                  size: "sm",
-                })
-              : getOutlinedButtonStyle(prefersDarkMode, {
-                  isEnabled: true,
-                  height: 38,
-                  size: "sm",
-                })
-          }
-        >
-          Realisasi Anggaran
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveSection("progress")}
-          style={
-            activeSection === "progress"
-              ? getPrimaryButtonStyle(prefersDarkMode, {
-                  isEnabled: true,
-                  height: 38,
-                  size: "sm",
-                })
-              : getOutlinedButtonStyle(prefersDarkMode, {
-                  isEnabled: true,
-                  height: 38,
-                  size: "sm",
-                })
-          }
-        >
-          Monitoring Anggaran
-        </button>
-      </section>
+          {BUDGET_SECTIONS.map((section) => {
+            const isActive = activeSection === section.key;
+
+            return (
+              <button
+                key={section.key}
+                type="button"
+                onClick={() => setActiveSection(section.key)}
+                className={`sub-page-button ${
+                  isActive ? "sub-page-button--active" : "sub-page-button--inactive"
+                }`}
+                style={{
+                  borderBottom: isActive
+                    ? "2px solid var(--btn-primary-bg)"
+                    : "2px solid transparent",
+                  lineHeight: 1.5,
+                }}
+              >
+                {section.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {activeSection === "dashboard" ? <BudgetDashboardPage /> : null}
       {activeSection === "rak-list" ? (
