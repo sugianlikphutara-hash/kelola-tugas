@@ -3,6 +3,7 @@ import ToastStack from "../components/ui/ToastStack";
 import AddDraftBudgetItemModal from "../components/budgeting/AddDraftBudgetItemModal";
 import EditRakMetadataModal from "../components/budgeting/EditRakMetadataModal";
 import SubActivityTable from "../components/budgeting/SubActivityTable";
+import { useAuth } from "../hooks/useAuth";
 import { useToasts } from "../hooks/useToasts";
 import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode";
 import {
@@ -19,6 +20,7 @@ import {
   getTableCellLabelTypography,
   getTableCellSubtitleTypography,
 } from "../lib/controlStyles";
+import { canEditRakDraft } from "../lib/authorization";
 import {
   getDraftActivationReadiness,
   getDraftPlanEditorOptions,
@@ -58,6 +60,7 @@ function getVersionStatusTone(status) {
 
 export default function BudgetPlanPage({ forcedRakVersionId = "" }) {
   const prefersDarkMode = usePrefersDarkMode();
+  const auth = useAuth();
   const { toasts, pushToast, dismissToast } = useToasts({ defaultDurationMs: 5000 });
   const [versionOptions, setVersionOptions] = useState([]);
   const [selectedRakVersionId, setSelectedRakVersionId] = useState("");
@@ -109,7 +112,11 @@ export default function BudgetPlanPage({ forcedRakVersionId = "" }) {
       null,
     [selectedRakVersionId, summaryState.rakVersion, versionOptions]
   );
-  const isDraftEditable = selectedVersion?.status === "DRAFT";
+  const canEditCurrentDraft = canEditRakDraft(auth.roleCode);
+  const isDraftEditable =
+    selectedVersion?.status === "DRAFT" && canEditCurrentDraft;
+  const isDraftReadOnlyByRole =
+    selectedVersion?.status === "DRAFT" && !canEditCurrentDraft;
 
   useEffect(() => {
     selectedRakVersionIdRef.current = selectedRakVersionId;
@@ -605,6 +612,10 @@ export default function BudgetPlanPage({ forcedRakVersionId = "" }) {
   }
 
   function handleOpenAddBudgetItem(subActivityRow, existingRows) {
+    if (!isDraftEditable) {
+      return;
+    }
+
     setAddItemModalState({
       isOpen: true,
       subActivityRow,
@@ -641,6 +652,10 @@ export default function BudgetPlanPage({ forcedRakVersionId = "" }) {
   }
 
   async function handleSubmitAddBudgetItem(form) {
+    if (!isDraftEditable) {
+      return;
+    }
+
     const subActivityRow = addItemModalState.subActivityRow;
 
     if (!subActivityRow?.rak_sub_activity_id) {
@@ -884,6 +899,12 @@ export default function BudgetPlanPage({ forcedRakVersionId = "" }) {
         {versionErrorMessage ? (
           <div style={getAlertStyle(prefersDarkMode, { tone: "error" })}>
             {versionErrorMessage}
+          </div>
+        ) : null}
+
+        {isDraftReadOnlyByRole ? (
+          <div style={getAlertStyle(prefersDarkMode, { tone: "info" })}>
+            Anda tidak memiliki izin untuk mengedit draft RAK.
           </div>
         ) : null}
 

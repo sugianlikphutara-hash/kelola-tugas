@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import ToastStack from "../components/ui/ToastStack";
+import { useAuth } from "../hooks/useAuth";
 import { useToasts } from "../hooks/useToasts";
 import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode";
 import {
@@ -19,6 +20,7 @@ import {
   getTableFrameStyle,
   getTableHeaderCellStyle,
 } from "../lib/controlStyles";
+import { canManageRakVersion } from "../lib/authorization";
 import {
   activateDraftRakVersion,
   cloneRakVersionRevision,
@@ -112,6 +114,7 @@ function ActionButton({
 
 export default function BudgetRakListPage({ onOpenVersionDetail }) {
   const prefersDarkMode = usePrefersDarkMode();
+  const auth = useAuth();
   const { toasts, pushToast, dismissToast } = useToasts({ defaultDurationMs: 5000 });
   const [fiscalYearOptions, setFiscalYearOptions] = useState([]);
   const [selectedFiscalYearId, setSelectedFiscalYearId] = useState("");
@@ -124,6 +127,7 @@ export default function BudgetRakListPage({ onOpenVersionDetail }) {
   const [fiscalYearErrorMessage, setFiscalYearErrorMessage] = useState("");
   const [pendingActionKey, setPendingActionKey] = useState("");
   const [pendingRowId, setPendingRowId] = useState("");
+  const canManageVersions = canManageRakVersion(auth.roleCode);
 
   useEffect(() => {
     let isMounted = true;
@@ -254,7 +258,7 @@ export default function BudgetRakListPage({ onOpenVersionDetail }) {
   }
 
   async function handleCloneRevision(row) {
-    if (pendingRowId) {
+    if (!canManageVersions || pendingRowId) {
       return;
     }
 
@@ -284,7 +288,7 @@ export default function BudgetRakListPage({ onOpenVersionDetail }) {
   }
 
   async function handleActivateDraft(row) {
-    if (pendingRowId) {
+    if (!canManageVersions || pendingRowId) {
       return;
     }
 
@@ -535,22 +539,26 @@ export default function BudgetRakListPage({ onOpenVersionDetail }) {
                               isEnabled={Boolean(row.id) && !isRowPending}
                               onClick={() => onOpenVersionDetail?.(row)}
                             />
-                            <ActionButton
-                              prefersDarkMode={prefersDarkMode}
-                              label={cloneLabel}
-                              tone="neutral"
-                              isEnabled={isCloneEnabled && !isRowPending}
-                              isBusy={pendingActionKey === `clone:${row.id}`}
-                              onClick={() => handleCloneRevision(row)}
-                            />
-                            <ActionButton
-                              prefersDarkMode={prefersDarkMode}
-                              label="Activate Draft"
-                              tone="accent"
-                              isEnabled={isActivateEnabled && !isRowPending}
-                              isBusy={pendingActionKey === `activate:${row.id}`}
-                              onClick={() => handleActivateDraft(row)}
-                            />
+                            {canManageVersions ? (
+                              <ActionButton
+                                prefersDarkMode={prefersDarkMode}
+                                label={cloneLabel}
+                                tone="neutral"
+                                isEnabled={isCloneEnabled && !isRowPending}
+                                isBusy={pendingActionKey === `clone:${row.id}`}
+                                onClick={() => handleCloneRevision(row)}
+                              />
+                            ) : null}
+                            {canManageVersions ? (
+                              <ActionButton
+                                prefersDarkMode={prefersDarkMode}
+                                label="Activate Draft"
+                                tone="accent"
+                                isEnabled={isActivateEnabled && !isRowPending}
+                                isBusy={pendingActionKey === `activate:${row.id}`}
+                                onClick={() => handleActivateDraft(row)}
+                              />
+                            ) : null}
                           </div>
                         </td>
                       </tr>

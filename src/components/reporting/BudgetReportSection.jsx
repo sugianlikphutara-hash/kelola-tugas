@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   getAlertStyle,
   getChipStyle,
   getEmptyStateStyle,
+  getInlineActionButtonStyle,
   getLoadingStateStyle,
   getMetaLabelStyle,
   getPanelStyle,
@@ -20,6 +21,22 @@ import {
   getRakVersions,
 } from "../../services/budgetRakService";
 import { getBudgetTrackingProgress } from "../../services/budgetProgressService";
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "ALL", label: "Semua" },
+  { value: "AMAN", label: "Aman" },
+  { value: "BELUM_TERSERAP", label: "Belum terserap" },
+  { value: "OVERSPEND", label: "Overspend" },
+  { value: "TANPA_ANGGARAN", label: "Tanpa anggaran" },
+];
+
+const SORT_OPTIONS = [
+  { value: "PLAN_DESC", label: "Plan terbesar" },
+  { value: "REALIZATION_DESC", label: "Realisasi terbesar" },
+  { value: "ABSORPTION_DESC", label: "Serapan tertinggi" },
+  { value: "ABSORPTION_ASC", label: "Serapan terendah" },
+  { value: "OVERSPEND_FIRST", label: "Overspend dulu" },
+];
 
 function formatCurrency(value) {
   return new Intl.NumberFormat("id-ID", {
@@ -75,23 +92,39 @@ function getAbsorptionPercent(planAmount, realizationAmount) {
   return (realization / plan) * 100;
 }
 
+function getRowPlanAmount(row) {
+  return Number(row?.plan_amount ?? row?.annual_plan ?? 0);
+}
+
+function getRowRealizationAmount(row) {
+  return Number(row?.realization_amount ?? row?.annual_realization ?? 0);
+}
+
 function getBudgetReportStatus(row) {
-  const planAmount = Number(row.plan_amount || 0);
-  const realizationAmount = Number(row.realization_amount || 0);
+  const planAmount = getRowPlanAmount(row);
+  const realizationAmount = getRowRealizationAmount(row);
 
   if (realizationAmount > planAmount) {
-    return { label: "Overspend", tone: "danger" };
+    return { key: "OVERSPEND", label: "Overspend", tone: "danger" };
   }
 
   if (realizationAmount === 0 && planAmount > 0) {
-    return { label: "Belum terserap", tone: "muted" };
+    return { key: "BELUM_TERSERAP", label: "Belum terserap", tone: "muted" };
   }
 
   if (planAmount === 0) {
-    return { label: "Tanpa anggaran", tone: "muted" };
+    return { key: "TANPA_ANGGARAN", label: "Tanpa anggaran", tone: "muted" };
   }
 
-  return { label: "Aman", tone: "success" };
+  return { key: "AMAN", label: "Aman", tone: "success" };
+}
+
+function getSafeFileSegment(value) {
+  return String(value || "-")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
 }
 
 function SummaryCard({ prefersDarkMode, label, value }) {
@@ -120,11 +153,18 @@ export default function BudgetReportSection({ prefersDarkMode }) {
   });
   const [reportState, setReportState] = useState({
     rows: [],
+    detailRows: [],
     summary: null,
     warnings: [],
     isLoading: false,
     errorMessage: "",
   });
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [sortMode, setSortMode] = useState("PLAN_DESC");
+  const [expandedSubActivityIds, setExpandedSubActivityIds] = useState({});
+  const [detailStateBySubActivity, setDetailStateBySubActivity] = useState({});
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportErrorMessage, setExportErrorMessage] = useState("");
   const requestKeyRef = useRef("");
 
   useEffect(() => {
@@ -230,6 +270,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
         requestKeyRef.current = "";
         setReportState({
           rows: [],
+          detailRows: [],
           summary: null,
           warnings: [],
           isLoading: false,
@@ -258,11 +299,14 @@ export default function BudgetReportSection({ prefersDarkMode }) {
 
         setReportState({
           rows: result.rows || [],
+          detailRows: result.detailRows || [],
           summary: result.summary || null,
           warnings: result.warnings || [],
           isLoading: false,
           errorMessage: "",
         });
+        setExpandedSubActivityIds({});
+        setDetailStateBySubActivity({});
       } catch (error) {
         if (!isMounted || requestKeyRef.current !== requestKey) {
           return;
@@ -270,6 +314,7 @@ export default function BudgetReportSection({ prefersDarkMode }) {
 
         setReportState({
           rows: [],
+          detailRows: [],
           summary: null,
           warnings: [],
           isLoading: false,
@@ -298,19 +343,63 @@ export default function BudgetReportSection({ prefersDarkMode }) {
     [selectedRakVersionId, versionOptions]
   );
 
+  const filteredRows = useMemo(() => {
+    const rows = [...(reportState.rows || [])];
+    const filtered =
+      statusFilter === "ALL"
+        ? rows
+        : rows.filter((row) => getBudgetReportStatus(row).key === statusFilter);
+
+    return filtered.sort((leftRow, rightRow) => {
+      const leftPlan = getRowPlanAmount(leftRow);
+      const rightPlan = getRowPlanAmount(rightRow);
+      const leftRealization = getRowRealizationAmount(leftRow);
+      const rightRealization = getRowRealizationAmount(rightRow);
+      const leftAbsorption = getAbsorptionPercent(leftPlan, leftRealization);
+      const rightAbsorption = getAbsorptionPercent(rightPlan, rightRealization);
+      const leftOverspend = leftRealization > leftPlan ? 1 : 0;
+      const rightOverspend = rightRealization > rightPlan ? 1 : 0;
+
+      if (sortMode === "REALIZATION_DESC") {
+        return rightRealization - leftRealization;
+      }
+
+      if (sortMode === "ABSORPTION_DESC") {
+        return rightAbsorption - leftAbsorption;
+      }
+
+      if (sortMode === "ABSORPTION_ASC") {
+        return leftAbsorption - rightAbsorption;
+      }
+
+      if (sortMode === "OVERSPEND_FIRST") {
+        if (rightOverspend !== leftOverspend) {
+          return rightOverspend - leftOverspend;
+        }
+
+        return rightRealization - leftRealization;
+      }
+
+      return rightPlan - leftPlan;
+    });
+  }, [reportState.rows, sortMode, statusFilter]);
+
   const summary = useMemo(() => {
-    const rows = reportState.rows || [];
-    const totalPlan =
-      reportState.summary?.total_plan ??
-      rows.reduce((total, row) => total + Number(row.plan_amount || 0), 0);
-    const totalRealization =
-      reportState.summary?.total_realization ??
-      rows.reduce((total, row) => total + Number(row.realization_amount || 0), 0);
-    const totalWarning =
-      reportState.summary?.total_warning_count ??
-      rows.reduce((total, row) => total + Number(row.warning_count || 0), 0);
+    const rows = filteredRows || [];
+    const totalPlan = rows.reduce(
+      (total, row) => total + getRowPlanAmount(row),
+      0
+    );
+    const totalRealization = rows.reduce(
+      (total, row) => total + getRowRealizationAmount(row),
+      0
+    );
+    const totalWarning = rows.reduce(
+      (total, row) => total + Number(row.warning_count || 0),
+      0
+    );
     const overspendCount = rows.filter(
-      (row) => Number(row.realization_amount || 0) > Number(row.plan_amount || 0)
+      (row) => getRowRealizationAmount(row) > getRowPlanAmount(row)
     ).length;
 
     return {
@@ -321,9 +410,140 @@ export default function BudgetReportSection({ prefersDarkMode }) {
       warningCount: totalWarning,
       overspendCount,
     };
-  }, [reportState.rows, reportState.summary]);
+  }, [filteredRows]);
 
   const tableBodyCellStyle = getTableBodyCellStyle({ padding: "12px 14px" });
+
+  function getDetailRowsForSubActivity(subActivityId) {
+    return (reportState.detailRows || []).filter(
+      (row) => String(row.sub_activity_id || "") === String(subActivityId || "")
+    );
+  }
+
+  function handleToggleExpand(row) {
+    const subActivityId = row.sub_activity_id;
+
+    if (!subActivityId) {
+      return;
+    }
+
+    if (expandedSubActivityIds[subActivityId]) {
+      setExpandedSubActivityIds((currentState) => ({
+        ...currentState,
+        [subActivityId]: false,
+      }));
+      return;
+    }
+
+    setExpandedSubActivityIds((currentState) => ({
+      ...currentState,
+      [subActivityId]: true,
+    }));
+    setDetailStateBySubActivity((currentState) => ({
+      ...currentState,
+      [subActivityId]: {
+        rows: [],
+        isLoading: true,
+        errorMessage: "",
+      },
+    }));
+
+    window.setTimeout(() => {
+      try {
+        setDetailStateBySubActivity((currentState) => ({
+          ...currentState,
+          [subActivityId]: {
+            rows: getDetailRowsForSubActivity(subActivityId),
+            isLoading: false,
+            errorMessage: "",
+          },
+        }));
+      } catch (error) {
+        setDetailStateBySubActivity((currentState) => ({
+          ...currentState,
+          [subActivityId]: {
+            rows: [],
+            isLoading: false,
+            errorMessage:
+              error?.message || "Gagal memuat detail akun belanja.",
+          },
+        }));
+      }
+    }, 0);
+  }
+
+  async function handleExportExcel() {
+    if (!selectedVersion?.id) {
+      return;
+    }
+
+    setIsExporting(true);
+    setExportErrorMessage("");
+
+    try {
+      const XLSX = await import("xlsx");
+      const filteredSubActivityIds = new Set(
+        filteredRows.map((row) => String(row.sub_activity_id || ""))
+      );
+      const detailRows = (reportState.detailRows || []).filter((row) =>
+        filteredSubActivityIds.has(String(row.sub_activity_id || ""))
+      );
+      const rowsToExport = detailRows.length > 0 ? detailRows : filteredRows;
+      const worksheetRows = rowsToExport.map((row) => {
+        const planAmount = getRowPlanAmount(row);
+        const realizationAmount = getRowRealizationAmount(row);
+        const balanceAmount = planAmount - realizationAmount;
+        const status = getBudgetReportStatus(row);
+        const isDetailRow = Boolean(row.budget_account_id || row.budget_account_code);
+
+        return {
+          "Tahun Anggaran": selectedFiscalYear?.year || "",
+          "Versi RAK": selectedVersion?.code || "",
+          "Kode Sub Kegiatan": row.sub_activity_code || "",
+          "Nama Sub Kegiatan": row.sub_activity_name || "",
+          "Level": isDetailRow ? "Akun Belanja" : "Sub Kegiatan",
+          "Kode Akun": isDetailRow ? row.budget_account_code || "" : "",
+          "Nama Akun": isDetailRow ? row.budget_account_name || "" : "",
+          "Total Plan": planAmount,
+          "Total Realisasi": realizationAmount,
+          "Sisa Anggaran": balanceAmount,
+          "Persentase Serapan": getAbsorptionPercent(
+            planAmount,
+            realizationAmount
+          ),
+          Status: status.label,
+        };
+      });
+      const worksheet = XLSX.utils.json_to_sheet(worksheetRows);
+      worksheet["!cols"] = [
+        { wch: 16 },
+        { wch: 24 },
+        { wch: 20 },
+        { wch: 34 },
+        { wch: 16 },
+        { wch: 18 },
+        { wch: 34 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 18 },
+        { wch: 18 },
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Anggaran");
+      XLSX.writeFile(
+        workbook,
+        `laporan-anggaran-${getSafeFileSegment(
+          selectedFiscalYear?.year
+        )}-${getSafeFileSegment(selectedVersion?.code)}.xlsx`
+      );
+    } catch (error) {
+      setExportErrorMessage(error?.message || "Gagal export laporan anggaran.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   return (
     <div style={{ display: "grid", gap: 18 }}>
@@ -421,6 +641,73 @@ export default function BudgetReportSection({ prefersDarkMode }) {
           </div>
         ) : null}
 
+        {exportErrorMessage ? (
+          <div style={getAlertStyle(prefersDarkMode, { tone: "error" })}>
+            {exportErrorMessage}
+          </div>
+        ) : null}
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+            gap: 12,
+            alignItems: "end",
+          }}
+        >
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={getMetaLabelStyle(prefersDarkMode)}>Status</span>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              style={getSelectStyle(prefersDarkMode, { tone: "panel", height: 42 })}
+            >
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label style={{ display: "grid", gap: 6 }}>
+            <span style={getMetaLabelStyle(prefersDarkMode)}>Urutkan</span>
+            <select
+              value={sortMode}
+              onChange={(event) => setSortMode(event.target.value)}
+              style={getSelectStyle(prefersDarkMode, { tone: "panel", height: 42 })}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              style={getInlineActionButtonStyle(prefersDarkMode, {
+                isEnabled:
+                  !isExporting &&
+                  !reportState.isLoading &&
+                  Boolean(selectedRakVersionId),
+                tone: "accent",
+                height: 42,
+              })}
+              disabled={
+                isExporting ||
+                reportState.isLoading ||
+                !selectedRakVersionId
+              }
+            >
+              {isExporting ? "Mengekspor..." : "Export Excel"}
+            </button>
+          </div>
+        </div>
+
         <div
           style={{
             display: "grid",
@@ -475,20 +762,32 @@ export default function BudgetReportSection({ prefersDarkMode }) {
 
       {!reportState.isLoading &&
       !reportState.errorMessage &&
-      reportState.rows.length === 0 ? (
+      filteredRows.length === 0 ? (
         <div style={getEmptyStateStyle(prefersDarkMode)}>
-          Belum ada data laporan anggaran untuk konteks ini.
+          Belum ada data laporan anggaran untuk filter ini.
         </div>
       ) : null}
 
       {!reportState.isLoading &&
       !reportState.errorMessage &&
-      reportState.rows.length > 0 ? (
+      filteredRows.length > 0 ? (
         <div style={getTableFrameStyle()}>
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1080 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1160 }}>
               <thead>
                 <tr>
+                  <th
+                    style={{
+                      ...getTableHeaderCellStyle({
+                        label: "Detail",
+                        alignMode: 3,
+                      }),
+                      width: 64,
+                      textAlign: "center",
+                    }}
+                  >
+                    Detail
+                  </th>
                   <th
                     style={{
                       ...getTableHeaderCellStyle({
@@ -562,45 +861,315 @@ export default function BudgetReportSection({ prefersDarkMode }) {
                 </tr>
               </thead>
               <tbody>
-                {reportState.rows.map((row) => {
+                {filteredRows.map((row) => {
                   const planAmount = Number(row.plan_amount || 0);
                   const realizationAmount = Number(row.realization_amount || 0);
                   const balanceAmount = planAmount - realizationAmount;
                   const status = getBudgetReportStatus(row);
+                  const isExpanded = Boolean(
+                    expandedSubActivityIds[row.sub_activity_id]
+                  );
+                  const detailState = detailStateBySubActivity[
+                    row.sub_activity_id
+                  ] || {
+                    rows: [],
+                    isLoading: false,
+                    errorMessage: "",
+                  };
+                  const expandedParentCellStyle = isExpanded
+                    ? { borderBottom: "1px solid var(--border-strong)" }
+                    : null;
 
                   return (
-                    <tr key={`${row.rak_version_id}:${row.sub_activity_id}`}>
-                      <td style={tableBodyCellStyle}>
-                        {row.sub_activity_code || "-"}
-                      </td>
-                      <td style={tableBodyCellStyle}>
-                        {row.sub_activity_name || "-"}
-                      </td>
-                      <td style={{ ...tableBodyCellStyle, textAlign: "right" }}>
-                        {formatCurrency(planAmount)}
-                      </td>
-                      <td style={{ ...tableBodyCellStyle, textAlign: "right" }}>
-                        {formatCurrency(realizationAmount)}
-                      </td>
-                      <td style={{ ...tableBodyCellStyle, textAlign: "right" }}>
-                        {formatCurrency(balanceAmount)}
-                      </td>
-                      <td style={{ ...tableBodyCellStyle, textAlign: "right" }}>
-                        {formatPercent(
-                          getAbsorptionPercent(planAmount, realizationAmount)
-                        )}
-                      </td>
-                      <td style={{ ...tableBodyCellStyle, textAlign: "center" }}>
-                        <span
-                          style={getChipStyle(prefersDarkMode, {
-                            tone: status.tone,
-                            size: "sm",
-                          })}
+                    <Fragment key={`${row.rak_version_id}:${row.sub_activity_id}`}>
+                      <tr>
+                        <td
+                          style={{
+                            ...tableBodyCellStyle,
+                            textAlign: "center",
+                            ...expandedParentCellStyle,
+                          }}
                         >
-                          {status.label}
-                        </span>
-                      </td>
-                    </tr>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleExpand(row)}
+                            title="Lihat detail akun"
+                            aria-label="Lihat detail akun"
+                            style={{
+                              minWidth: 34,
+                              minHeight: 34,
+                              fontSize: 18,
+                              lineHeight: 1,
+                              borderRadius: 8,
+                              border: "1px solid var(--control-border)",
+                              background: "var(--surface-1)",
+                              color: "var(--text-h)",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {isExpanded ? "-" : "+"}
+                          </button>
+                        </td>
+                        <td style={{ ...tableBodyCellStyle, ...expandedParentCellStyle }}>
+                          {row.sub_activity_code || "-"}
+                        </td>
+                        <td style={{ ...tableBodyCellStyle, ...expandedParentCellStyle }}>
+                          {row.sub_activity_name || "-"}
+                        </td>
+                        <td
+                          style={{
+                            ...tableBodyCellStyle,
+                            textAlign: "right",
+                            ...expandedParentCellStyle,
+                          }}
+                        >
+                          {formatCurrency(planAmount)}
+                        </td>
+                        <td
+                          style={{
+                            ...tableBodyCellStyle,
+                            textAlign: "right",
+                            ...expandedParentCellStyle,
+                          }}
+                        >
+                          {formatCurrency(realizationAmount)}
+                        </td>
+                        <td
+                          style={{
+                            ...tableBodyCellStyle,
+                            textAlign: "right",
+                            ...expandedParentCellStyle,
+                          }}
+                        >
+                          {formatCurrency(balanceAmount)}
+                        </td>
+                        <td
+                          style={{
+                            ...tableBodyCellStyle,
+                            textAlign: "right",
+                            ...expandedParentCellStyle,
+                          }}
+                        >
+                          {formatPercent(
+                            getAbsorptionPercent(planAmount, realizationAmount)
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            ...tableBodyCellStyle,
+                            textAlign: "center",
+                            ...expandedParentCellStyle,
+                          }}
+                        >
+                          <span
+                            style={getChipStyle(prefersDarkMode, {
+                              tone: status.tone,
+                              size: "sm",
+                            })}
+                          >
+                            {status.label}
+                          </span>
+                        </td>
+                      </tr>
+
+                      {isExpanded ? (
+                        <tr>
+                          <td
+                            colSpan={8}
+                            style={{
+                              ...tableBodyCellStyle,
+                              padding: "0 18px 18px 78px",
+                              background: "var(--surface-1)",
+                            }}
+                          >
+                            {detailState.isLoading ? (
+                              <div style={getLoadingStateStyle(prefersDarkMode)}>
+                                Memuat detail akun belanja...
+                              </div>
+                            ) : null}
+
+                            {!detailState.isLoading && detailState.errorMessage ? (
+                              <div
+                                style={getAlertStyle(prefersDarkMode, {
+                                  tone: "error",
+                                })}
+                              >
+                                {detailState.errorMessage}
+                              </div>
+                            ) : null}
+
+                            {!detailState.isLoading &&
+                            !detailState.errorMessage &&
+                            detailState.rows.length === 0 ? (
+                              <div style={getEmptyStateStyle(prefersDarkMode)}>
+                                Belum ada detail akun belanja.
+                              </div>
+                            ) : null}
+
+                            {!detailState.isLoading &&
+                            !detailState.errorMessage &&
+                            detailState.rows.length > 0 ? (
+                              <div style={getTableFrameStyle({ borderRadius: 0 })}>
+                                <div style={{ overflowX: "auto" }}>
+                                  <table
+                                    style={{
+                                      width: "100%",
+                                      borderCollapse: "collapse",
+                                      minWidth: 920,
+                                    }}
+                                  >
+                                    <thead>
+                                      <tr>
+                                        <th
+                                          style={getTableHeaderCellStyle({
+                                            label: "Kode Akun",
+                                            alignMode: 3,
+                                            isFirstColumn: true,
+                                          })}
+                                        >
+                                          Kode Akun
+                                        </th>
+                                        <th
+                                          style={getTableHeaderCellStyle({
+                                            label: "Nama Akun",
+                                            alignMode: 3,
+                                          })}
+                                        >
+                                          Nama Akun
+                                        </th>
+                                        <th
+                                          style={getTableHeaderCellStyle({
+                                            label: "Total Plan",
+                                            alignMode: 3,
+                                          })}
+                                        >
+                                          Total Plan
+                                        </th>
+                                        <th
+                                          style={getTableHeaderCellStyle({
+                                            label: "Total Realisasi",
+                                            alignMode: 3,
+                                          })}
+                                        >
+                                          Total Realisasi
+                                        </th>
+                                        <th
+                                          style={getTableHeaderCellStyle({
+                                            label: "Sisa Anggaran",
+                                            alignMode: 3,
+                                          })}
+                                        >
+                                          Sisa Anggaran
+                                        </th>
+                                        <th
+                                          style={getTableHeaderCellStyle({
+                                            label: "Persentase Serapan",
+                                            alignMode: 3,
+                                          })}
+                                        >
+                                          Persentase Serapan
+                                        </th>
+                                        <th
+                                          style={{
+                                            ...getTableHeaderCellStyle({
+                                              label: "Status",
+                                              alignMode: 3,
+                                            }),
+                                            textAlign: "center",
+                                          }}
+                                        >
+                                          Status
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {detailState.rows.map((detailRow) => {
+                                        const detailPlanAmount =
+                                          getRowPlanAmount(detailRow);
+                                        const detailRealizationAmount =
+                                          getRowRealizationAmount(detailRow);
+                                        const detailStatus =
+                                          getBudgetReportStatus(detailRow);
+
+                                        return (
+                                          <tr
+                                            key={`${detailRow.sub_activity_id}:${detailRow.budget_account_id}`}
+                                          >
+                                            <td style={tableBodyCellStyle}>
+                                              {detailRow.budget_account_code || "-"}
+                                            </td>
+                                            <td style={tableBodyCellStyle}>
+                                              {detailRow.budget_account_name || "-"}
+                                            </td>
+                                            <td
+                                              style={{
+                                                ...tableBodyCellStyle,
+                                                textAlign: "right",
+                                              }}
+                                            >
+                                              {formatCurrency(detailPlanAmount)}
+                                            </td>
+                                            <td
+                                              style={{
+                                                ...tableBodyCellStyle,
+                                                textAlign: "right",
+                                              }}
+                                            >
+                                              {formatCurrency(
+                                                detailRealizationAmount
+                                              )}
+                                            </td>
+                                            <td
+                                              style={{
+                                                ...tableBodyCellStyle,
+                                                textAlign: "right",
+                                              }}
+                                            >
+                                              {formatCurrency(
+                                                detailPlanAmount -
+                                                  detailRealizationAmount
+                                              )}
+                                            </td>
+                                            <td
+                                              style={{
+                                                ...tableBodyCellStyle,
+                                                textAlign: "right",
+                                              }}
+                                            >
+                                              {formatPercent(
+                                                getAbsorptionPercent(
+                                                  detailPlanAmount,
+                                                  detailRealizationAmount
+                                                )
+                                              )}
+                                            </td>
+                                            <td
+                                              style={{
+                                                ...tableBodyCellStyle,
+                                                textAlign: "center",
+                                              }}
+                                            >
+                                              <span
+                                                style={getChipStyle(prefersDarkMode, {
+                                                  tone: detailStatus.tone,
+                                                  size: "sm",
+                                                })}
+                                              >
+                                                {detailStatus.label}
+                                              </span>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   );
                 })}
               </tbody>

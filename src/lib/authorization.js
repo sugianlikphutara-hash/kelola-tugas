@@ -30,6 +30,35 @@ export function canAccessMasterData(roleCode) {
   return isAdminRole(roleCode);
 }
 
+export function canEditBudgetRealization(roleCode) {
+  const normalizedRoleCode = normalizeRoleCode(roleCode);
+
+  return [
+    ROLE_CODES.ADMIN,
+    ROLE_CODES.KASI,
+    ROLE_CODES.KASUBAG,
+    ROLE_CODES.STAF,
+  ].includes(normalizedRoleCode);
+}
+
+export function canManageRakVersion(roleCode) {
+  return isAdminRole(roleCode);
+}
+
+export function canEditRakDraft(roleCode) {
+  const normalizedRoleCode = normalizeRoleCode(roleCode);
+
+  return [
+    ROLE_CODES.ADMIN,
+    ROLE_CODES.KASI,
+    ROLE_CODES.KASUBAG,
+  ].includes(normalizedRoleCode);
+}
+
+export function canLockBudgetPeriod(roleCode) {
+  return isAdminRole(roleCode);
+}
+
 export function canCreateTask(roleCode) {
   const normalizedRoleCode = normalizeRoleCode(roleCode);
 

@@ -6,7 +6,10 @@ import RealizationSubActivityTable from "../components/budgeting/RealizationSubA
 import { useAuth } from "../hooks/useAuth";
 import { useToasts } from "../hooks/useToasts";
 import { usePrefersDarkMode } from "../hooks/usePrefersDarkMode";
-import { isAdminRole } from "../lib/authorization";
+import {
+  canEditBudgetRealization,
+  canLockBudgetPeriod,
+} from "../lib/authorization";
 import {
   getAlertStyle,
   getChipStyle,
@@ -524,7 +527,9 @@ export default function BudgetRealizationPage() {
     [selectedPeriodMonth]
   );
 
-  const canManagePeriodLock = isAdminRole(auth.roleCode);
+  const canEditRealization = canEditBudgetRealization(auth.roleCode);
+  const canManagePeriodLock = canLockBudgetPeriod(auth.roleCode);
+  const isRealizationReadOnly = !canEditRealization;
 
   const summaryTotals = useMemo(
     () =>
@@ -810,6 +815,22 @@ export default function BudgetRealizationPage() {
   }
 
   async function executeSaveRow(detailKey, summaryRow, detailRow, normalizedAmount) {
+    if (!canEditRealization) {
+      setRowMutationStateByDetailKey((currentState) => ({
+        ...currentState,
+        [detailKey]: {
+          ...(currentState[detailKey] || {}),
+          [detailRow.budget_account_id]: {
+            ...(currentState[detailKey]?.[detailRow.budget_account_id] || {}),
+            isSaving: false,
+            errorMessage: "Anda tidak memiliki izin untuk mengubah realisasi.",
+            savedMessage: "",
+          },
+        },
+      }));
+      return;
+    }
+
     if (periodLockState.isLocked) {
       setRowMutationStateByDetailKey((currentState) => ({
         ...currentState,
@@ -1418,6 +1439,16 @@ export default function BudgetRealizationPage() {
                   ? "LOCKED"
                   : "OPEN"}
             </span>
+            {isRealizationReadOnly ? (
+              <span
+                style={getChipStyle(prefersDarkMode, {
+                  tone: "muted",
+                  size: "sm",
+                })}
+              >
+                Mode baca saja
+              </span>
+            ) : null}
 
             <select
               value={selectedPeriodMonth}
@@ -1497,6 +1528,12 @@ export default function BudgetRealizationPage() {
           </div>
         ) : null}
 
+        {isRealizationReadOnly ? (
+          <div style={getAlertStyle(prefersDarkMode, { tone: "neutral" })}>
+            Mode baca saja
+          </div>
+        ) : null}
+
         {summaryState.isLoading ? (
           <div style={getLoadingStateStyle(prefersDarkMode)}>
             Memuat ringkasan realisasi...
@@ -1529,7 +1566,7 @@ export default function BudgetRealizationPage() {
             onToggleExpand={handleToggleExpand}
             draftValuesByDetailKey={draftValuesByDetailKey}
             rowMutationStateByDetailKey={rowMutationStateByDetailKey}
-            isPeriodLocked={periodLockState.isLocked}
+            isPeriodLocked={periodLockState.isLocked || isRealizationReadOnly}
             onDraftChange={handleDraftChange}
             onSaveRow={handleSaveRow}
             onOpenHistory={handleOpenHistory}
