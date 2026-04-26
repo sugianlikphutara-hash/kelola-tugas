@@ -637,6 +637,7 @@ export default function KanbanPage() {
       await loadTasks();
     } catch (error) {
       console.error(error);
+      setErrorMessage(error.message || "Gagal memindahkan task di kanban.");
     } finally {
       setDraggedTask(null);
       setDropColumnId(null);

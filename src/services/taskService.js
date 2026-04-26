@@ -1110,7 +1110,17 @@ export async function syncTaskStatusWithKanbanColumn(taskId, columnId) {
     return null;
   }
 
-  return updateTaskStatus(taskId, statusData.id);
+  const { data, error } = await supabase.rpc("move_task_kanban", {
+    p_task_id: taskId,
+    p_status_id: statusData.id,
+  });
+
+  if (error) {
+    console.error(error);
+    throw error;
+  }
+
+  return data;
 }
 
 export async function moveTaskKanbanCard({
@@ -1199,10 +1209,6 @@ export async function moveTaskKanbanCard({
         currentCard.column_id,
         currentCard.sort_order
       );
-
-      if (currentTask?.status_id) {
-        await updateTaskStatus(taskId, currentTask.status_id);
-      }
     } catch (rollbackError) {
       console.error("Rollback move task kanban gagal", rollbackError);
     }
